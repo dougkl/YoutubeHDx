@@ -349,9 +349,11 @@ describe('player: caption style', () => {
 // ---------------------------------------------------------------- defaults.js
 
 describe('hiding end cards and the end screen', () => {
-  test('both are hidden by default', () => {
+  test('end cards, end screen and comments are hidden by default', () => {
     assert.equal(YHDX_DEFAULTS.hideEndCards, true);
     assert.equal(YHDX_DEFAULTS.hideEndScreen, true);
+    assert.equal(YHDX_DEFAULTS.hideComments, true);
+    assert.match(yhdxBuildHideCss(YHDX_DEFAULTS), /ytd-comments#comments[^{]*\{ display: none !important; \}/);
     const css = yhdxBuildHideCss(YHDX_DEFAULTS);
     assert.match(css, /\.ytp-ce-element[^{]*\{ display: none !important; \}/);
     assert.match(css, /\.ytp-cards-teaser/);
@@ -362,10 +364,14 @@ describe('hiding end cards and the end screen', () => {
     const cardsOnly = yhdxBuildHideCss({ hideEndCards: true, hideEndScreen: false });
     assert.match(cardsOnly, /ytp-ce-element/);
     assert.doesNotMatch(cardsOnly, /endscreen/);
+    const commentsOnly = yhdxBuildHideCss({ hideComments: true });
+    assert.match(commentsOnly, /ytd-comments#comments/);
+    assert.match(commentsOnly, /engagement-panel-comments-section/);
+    assert.doesNotMatch(commentsOnly, /ytp-ce-element|videowall/);
     const wallOnly = yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: true });
     assert.match(wallOnly, /videowall-endscreen/);
     assert.doesNotMatch(wallOnly, /ytp-ce-element/);
-    assert.equal(yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: false }), '');
+    assert.equal(yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: false, hideComments: false }), '');
   });
 
   test('never hides the autoplay countdown (so autoplay can still be canceled)', () => {
@@ -392,12 +398,13 @@ describe('hiding end cards and the end screen', () => {
     const savedBefore = { quality: 'hd2160', captions: 'english' }; // no hideEnd* keys yet
     const posted = await runBridge(savedBefore);
     assert.equal(posted[0].settings.hideEndCards, true);
+    assert.equal(posted[0].settings.hideComments, true);
     assert.match(posted[0].captionCss, /ytp-ce-element/);
   });
 
   test('turning them off in settings stops hiding', async () => {
-    const posted = await runBridge({ hideEndCards: false, hideEndScreen: false });
-    assert.doesNotMatch(posted[0].captionCss, /ytp-ce-element|videowall/);
+    const posted = await runBridge({ hideEndCards: false, hideEndScreen: false, hideComments: false });
+    assert.doesNotMatch(posted[0].captionCss, /ytp-ce-element|videowall|ytd-comments/);
   });
 
   test('the injected stylesheet carries the hiding rules into the page', () => {

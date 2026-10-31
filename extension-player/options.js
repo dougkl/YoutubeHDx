@@ -8,6 +8,7 @@ function fill(s) {
   $('captionLanguages').value = (s.captionLanguages || []).join(', ');
   $('hideEndCards').checked = s.hideEndCards;
   $('hideEndScreen').checked = s.hideEndScreen;
+  $('hideComments').checked = s.hideComments;
   $('styleEnabled').checked = s.captionStyle.enabled;
   for (const f of STYLE_FIELDS) $(f).value = s.captionStyle[f];
   preview();
@@ -25,6 +26,7 @@ function read() {
     captionLanguages: $('captionLanguages').value.split(',').map((x) => x.trim()).filter(Boolean),
     hideEndCards: $('hideEndCards').checked,
     hideEndScreen: $('hideEndScreen').checked,
+    hideComments: $('hideComments').checked,
     captionStyle: style,
   };
 }

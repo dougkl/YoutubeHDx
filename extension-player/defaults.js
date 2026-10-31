@@ -8,6 +8,7 @@ const YHDX_DEFAULTS = {
   captionLanguages: ['en', 'en-US', 'en-GB'],
   hideEndCards: true,           // video/channel/playlist boxes over the last seconds + "i" info-card teasers
   hideEndScreen: true,          // suggestions wall when a video ends (autoplay countdown stays, so it can be canceled)
+  hideComments: true,           // comments under the video (and the comments panel on Shorts)
   captionStyle: {
     enabled: true,
     fontFamily: '"Segoe UI", Roboto, Arial, sans-serif',
@@ -54,7 +55,7 @@ function yhdxBuildCaptionCss(style) {
 }`;
 }
 
-/** CSS that hides YouTube's end cards and end-screen wall. Empty string = hide nothing. */
+/** CSS that hides YouTube's end cards, end-screen wall and comments. Empty string = hide nothing. */
 function yhdxBuildHideCss(settings) {
   const rules = [];
   if (settings?.hideEndCards) {
@@ -62,6 +63,9 @@ function yhdxBuildHideCss(settings) {
   }
   if (settings?.hideEndScreen) {
     rules.push('.html5-endscreen.videowall-endscreen, .ytp-endscreen-content { display: none !important; }');
+  }
+  if (settings?.hideComments) {
+    rules.push('ytd-comments#comments, ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] { display: none !important; }');
   }
   return rules.join('\n');
 }
