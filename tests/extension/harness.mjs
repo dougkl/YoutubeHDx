@@ -59,6 +59,7 @@ export class FakePlayer {
     if (module === 'captions' && option === 'track') this.currentTrack = value?.languageCode ? value : null;
   }
   getCurrentTime() { return this.time; }
+  querySelector(sel) { return sel === '.ytp-right-controls' ? this.controls ?? null : null; }
   loadVideoById(arg) { this.calls.push(['loadVideoById', arg]); }
   loadModule(m) { this.calls.push(['loadModule', m]); if (m === 'captions') this.captionsLoaded = true; }
   unloadModule(m) { this.calls.push(['unloadModule', m]); }
@@ -78,7 +79,28 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
     getElementById: (id) => (id === 'movie_player' ? page.player : elements.get(id) ?? null),
     createElement: (tag) => {
       const el = { tagName: tag.toUpperCase(), id: '', className: '', textContent: '', style: {}, children: [] };
-      el.appendChild = (child) => { el.children.push(child); child.parent = el; };
+      el.appendChild = (child) => { el.children.push(child); child.parent = el; child.parentElement = el; };
+      el.prepend = (child) => { el.children.unshift(child); child.parent = el; child.parentElement = el; };
+      el.insertBefore = (child, ref) => {
+        const i = el.children.indexOf(ref);
+        el.children.splice(i < 0 ? el.children.length : i, 0, child);
+        child.parent = el; child.parentElement = el;
+      };
+      el.contains = (child) => el.children.some((c) => c === child || c.contains?.(child));
+      el.querySelector = (sel) => {
+        const cls = sel.startsWith('.') ? sel.slice(1) : null;
+        for (const c of el.children) {
+          if (cls && String(c.className).split(' ').includes(cls)) return c;
+          const deep = c.querySelector?.(sel);
+          if (deep) return deep;
+        }
+        return null;
+      };
+      el.attrs = {};
+      el.setAttribute = (k, v) => { el.attrs[k] = String(v); };
+      el.listeners = {};
+      el.addEventListener = (type, fn) => (el.listeners[type] ??= []).push(fn);
+      el.click = () => { for (const fn of el.listeners.click ?? []) fn({ stopPropagation() {} }); };
       el.remove = () => {
         elements.delete(el.id);
         if (el.parent?.children) el.parent.children = el.parent.children.filter((c) => c !== el);
@@ -92,16 +114,26 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
 
   const window = {
     addEventListener: (type, fn) => (winListeners[type] ??= []).push(fn),
-    postMessage: (data) => posted.push(data),
+    postMessage: (data) => {
+      posted.push(data);
+      // Stand-in for the bridge's per-video subtitle choices (answers immediately unless turned off).
+      if (data?.__yhdx === 'prefs-save') page.savedPrefs[data.videoId] = JSON.parse(JSON.stringify(data.prefs));
+      if (data?.__yhdx === 'prefs-request' && page.answerPrefs) {
+        const prefs = JSON.parse(JSON.stringify(page.savedPrefs[data.videoId] ?? {}));
+        for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'prefs', videoId: data.videoId, prefs } });
+      }
+    },
   };
 
   const page = {
     player,
     posted,
+    savedPrefs: {},
+    answerPrefs: true,
     youtubeCaptionsShowing: false,
     /** The bridge answering a lyrics request. */
-    sendLyrics(videoId, cues) {
-      for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'lyrics', videoId, cues } });
+    sendLyrics(videoId, cues, meta = {}) {
+      for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'lyrics', videoId, cues, ...meta } });
     },
     /** The lyrics line the extension drew (or undefined). */
     lyricsWindow() { return page.player.children.find((c) => c.className === 'yhdx-lyrics-window' && !c.removed); },
@@ -134,6 +166,23 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
   }
   let fetchReply = null;
   const fakeFetch = async () => fetchReply();
+
+  page.makeElement = (tag) => document.createElement(tag);
+  // YouTube's control bar (right side), where the out-of-sync button goes.
+  player.controls = document.createElement('div');
+  player.controls.className = 'ytp-right-controls';
+  /** Elements the extension added to the player, by class. */
+  page.inPlayer = (cls) => page.player.children.filter((c) => !c.removed && String(c.className).split(' ').includes(cls));
+  const findDeep = (el, pred) => { for (const c of el.children ?? []) { if (pred(c)) return c; const d = findDeep(c, pred); if (d) return d; } return null; };
+  page.syncButton = () => findDeep(player.controls, (c) => String(c.className).includes('yhdx-sync-button')) ?? undefined;
+  page.menu = () => page.inPlayer('yhdx-sync-menu')[0];
+  page.menuItems = () => (page.menu()?.children ?? []).filter((c) => c.className === 'yhdx-item').map((c) => c.textContent);
+  page.chooseMenu = (label) => {
+    const item = page.menu()?.children.find((c) => c.className === 'yhdx-item' && c.textContent === label);
+    if (!item) throw new Error(`menu item "${label}" not found; have: ${page.menuItems().join(' | ')}`);
+    item.click();
+  };
+  page.toastText = () => page.inPlayer('yhdx-toast')[0]?.textContent;
 
   const ctx = vm.createContext({
     window, document, location: page.location, HTMLVideoElement, URL, ArrayBuffer, JSON,
@@ -198,7 +247,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
 }
 
 /** Runs defaults.js + content-bridge.js (isolated world) with the given saved settings; returns what it posts. */
-export async function runBridge(saved = {}, { lyricsReply = null, onSend = () => {} } = {}) {
+export async function runBridge(saved = {}, { lyricsReply = null, onSend = () => {}, local = {} } = {}) {
   const posted = [];
   const listeners = [];
   const window = { addEventListener: (t, fn) => listeners.push(fn), postMessage: (data) => posted.push(data) };
@@ -206,6 +255,11 @@ export async function runBridge(saved = {}, { lyricsReply = null, onSend = () =>
     runtime: { sendMessage: async (msg) => { onSend(msg); return lyricsReply; } },
     storage: {
       sync: { get: async (defaults) => ({ ...structuredClone(defaults), ...saved }) },
+      local: {
+        get: async (key) => (key in local ? { [key]: structuredClone(local[key]) } : {}),
+        set: async (obj) => Object.assign(local, structuredClone(obj)),
+        remove: async (key) => { delete local[key]; },
+      },
       onChanged: { addListener: () => {} },
     },
   };
@@ -213,6 +267,7 @@ export async function runBridge(saved = {}, { lyricsReply = null, onSend = () =>
   vm.runInContext(playerSource('defaults.js') + '\n' + playerSource('content-bridge.js'), ctx);
   await new Promise((r) => setImmediate(r));
   posted.receive = async (data) => { for (const fn of listeners) fn({ source: window, data }); await new Promise((r) => setImmediate(r)); };
+  posted.local = local;
   return posted;
 }
 

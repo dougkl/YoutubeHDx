@@ -19,15 +19,19 @@ async function rememberLyrics(videoId, result) {
 
 async function lookupLyrics(msg) {
   if (!/^[\w-]{6,20}$/.test(String(msg.videoId || ''))) return { cues: null, reason: 'bad video id' };
-  const cached = await cachedLyrics(msg.videoId);
-  if (cached !== undefined) return cached;
+  // "Try other subtitles" passes the rejected ones; those lookups skip the cache (it holds the rejected set).
+  const exclude = (Array.isArray(msg.exclude) ? msg.exclude : []).map(String).slice(0, 20);
+  if (!exclude.length) {
+    const cached = await cachedLyrics(msg.videoId);
+    if (cached !== undefined) return cached;
+  }
 
   const { openSubtitlesKey } = await chrome.storage.local.get({ openSubtitlesKey: '' });
   const result = await yhdxFindLyrics(
     { title: msg.title, author: msg.author, duration: Number(msg.duration) },
-    { fetchFn: (url, init) => fetch(url, init), openSubtitlesKey: String(openSubtitlesKey || '').trim() },
+    { fetchFn: (url, init) => fetch(url, init), openSubtitlesKey: String(openSubtitlesKey || '').trim(), exclude },
   );
-  await rememberLyrics(msg.videoId, result);
+  if (!exclude.length) await rememberLyrics(msg.videoId, result);
   return result;
 }
 

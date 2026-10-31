@@ -214,7 +214,7 @@ describe('bridge between page and service worker', () => {
     const sent = [];
     const posted = await runBridge({}, { lyricsReply: { cues: [{ start: 1, end: 2, text: 'hi' }], source: 'LRCLIB' }, onSend: (m) => sent.push(m) });
     await posted.receive({ __yhdx: 'lyrics-request', videoId: 'wO0A0XcWy88', title: 'A - B', author: 'A', duration: 200 });
-    assert.deepEqual(plain(sent[0]), { type: 'lyrics', videoId: 'wO0A0XcWy88', title: 'A - B', author: 'A', duration: 200 });
+    assert.deepEqual(plain(sent[0]), { type: 'lyrics', videoId: 'wO0A0XcWy88', title: 'A - B', author: 'A', duration: 200, exclude: [] });
     const reply = posted.find((p) => p.__yhdx === 'lyrics');
     assert.equal(reply.videoId, 'wO0A0XcWy88');
     assert.equal(reply.cues[0].text, 'hi');
@@ -243,7 +243,7 @@ describe('lyrics on the page', () => {
     const page = noCaptionsVideo();
     const req = plain(requests(page));
     assert.equal(req.length, 1);
-    assert.deepEqual(req[0], { __yhdx: 'lyrics-request', videoId: 'vid1', title: 'Peter Schilling - Major Tom (Coming Home) (Official Video)', author: 'Peter Schilling', duration: 300 });
+    assert.deepEqual(req[0], { __yhdx: 'lyrics-request', videoId: 'vid1', title: 'Peter Schilling - Major Tom (Coming Home) (Official Video)', author: 'Peter Schilling', duration: 300, exclude: [] });
   });
 
   test('asks for lyrics when the video has no captions at all', () => {

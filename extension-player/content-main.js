@@ -14,7 +14,8 @@
   let state = freshState(null);
 
   function freshState(videoId) {
-    return { videoId, qualityDone: false, captionsDone: false, attempts: 0, sawAd: false };
+    // prefs: this video's subtitle choices ({rejectYoutube, rejectedLyrics, offset, off}); null until loaded.
+    return { videoId, qualityDone: false, captionsDone: false, attempts: 0, sawAd: false, prefs: null, prefsWaits: 0 };
   }
 
   const getPlayer = () => document.getElementById('movie_player');
@@ -55,6 +56,8 @@
     if (settings.captions === 'leave') return true;
     if (settings.captions === 'off') { captionsOff(p); return true; }
     if (typeof p.getOption !== 'function') return false;
+    const prefs = state.prefs || {};
+    if (prefs.off) { captionsOff(p); setCurrent(null); return true; } // user turned subtitles off for this video
 
     let tracks = [];
     try { tracks = p.getOption('captions', 'tracklist', { includeAsr: true }) || []; } catch { /* module not loaded */ }
@@ -74,11 +77,14 @@
     }
     pick ??= manual.find((t) => code(t).startsWith('en'));
 
-    if (pick) {
+    if (pick && !prefs.rejectYoutube) {
       p.setOption('captions', 'track', pick);
       lastPick = { videoId: state.videoId, track: pick };
+      setCurrent({ kind: 'youtube', label: pick.displayName || pick.name || 'YouTube English captions' });
     } else {
-      captionsOff(p); // only auto-generated English exists: keep captions off
+      // Only auto-generated English exists, or the user marked YouTube's track as out of sync: captions off,
+      // lyrics instead.
+      captionsOff(p);
       requestLyrics(p);
     }
     return true;
@@ -91,19 +97,36 @@
   const LYRICS_TICK_MS = 200;
   let lyrics = { videoId: null, requested: null, cues: null, el: null, span: null, timer: null, durationTries: 0 };
 
-  function requestLyrics(p) {
-    if (!settings?.lyricsWhenNoCaptions || settings.captions !== 'english') return;
+  /** Asks for lyrics for the current video. Returns false if lyrics are switched off in settings. */
+  function requestLyrics(p, { announce = false } = {}) {
+    if (!settings?.lyricsWhenNoCaptions || settings.captions !== 'english') return false;
     const vd = p?.getVideoData?.() || {};
-    if (!vd.video_id || lyrics.requested === vd.video_id) return;
+    if (!vd.video_id || lyrics.requested === vd.video_id) return true;
     const duration = Number(p.getDuration?.()) || 0;
     if (!(duration > 0)) {
-      if (lyrics.durationTries++ < 10) setTimeout(() => requestLyrics(getPlayer()), 1000); // metadata not loaded yet
-      return;
+      if (lyrics.durationTries++ < 10) setTimeout(() => requestLyrics(getPlayer(), { announce }), 1000); // metadata not loaded yet
+      return true;
     }
     lyrics.requested = vd.video_id;
     lyrics.durationTries = 0;
-    window.postMessage({ __yhdx: 'lyrics-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration },
+    lyrics.announce = announce;
+    const exclude = vd.video_id === state.videoId ? state.prefs?.rejectedLyrics ?? [] : [];
+    window.postMessage({ __yhdx: 'lyrics-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration, exclude },
       location.origin);
+    return true;
+  }
+
+  function onLyrics(data) {
+    const playing = getPlayer()?.getVideoData?.()?.video_id;
+    const announce = lyrics.announce && data.videoId === playing;
+    lyrics.announce = false;
+    if (data.videoId !== playing) return;
+    if (Array.isArray(data.cues) && data.cues.length) {
+      startLyrics(data.videoId, data.cues, { id: data.id, source: data.source, matched: data.matched });
+      if (announce) toast(`Now showing lyrics from ${data.source || 'another source'}`);
+    } else if (announce) {
+      toast('No other subtitles found for this video');
+    }
   }
 
   function stopLyrics() {
@@ -112,7 +135,7 @@
     lyrics = { ...lyrics, videoId: null, cues: null, el: null, span: null, timer: null };
   }
 
-  function startLyrics(videoId, cues) {
+  function startLyrics(videoId, cues, meta = {}) {
     const p = getPlayer();
     if (!Array.isArray(cues) || !cues.length || !p || p.getVideoData?.()?.video_id !== videoId) return;
     stopLyrics();
@@ -127,6 +150,7 @@
     el.appendChild(span);
     p.appendChild(el);
     lyrics = { ...lyrics, videoId, cues: cues.filter((c) => c && c.end > c.start && c.text), el, span };
+    setCurrent({ kind: 'lyrics', id: meta.id ?? null, source: meta.source ?? 'lyrics', label: meta.matched ?? '' });
     renderLyrics();
   }
 
@@ -136,11 +160,194 @@
     // Never on top of an ad or of YouTube's own captions (e.g. if the user turns CC on by hand).
     const ownCaptions = document.querySelector('.ytp-caption-segment:not(.yhdx-lyrics)');
     const t = Number(p.getCurrentTime?.()) || 0;
-    const cue = p.classList.contains('ad-showing') || ownCaptions ? null : lyrics.cues.find((c) => t >= c.start && t < c.end);
+    const offset = Number(state.prefs?.offset) || 0; // user's "earlier / later" nudge for this video
+    const cue = p.classList.contains('ad-showing') || ownCaptions
+      ? null : lyrics.cues.find((c) => t >= c.start + offset && t < c.end + offset);
     const text = cue?.text ?? '';
     if (lyrics.span.textContent !== text) lyrics.span.textContent = text;
     lyrics.el.style.display = text ? '' : 'none';
     lyrics.timer = setTimeout(renderLyrics, LYRICS_TICK_MS);
+  }
+
+  // ---------- "subtitles out of sync" button and menu ----------
+  // A button in YouTube's control bar (works in fullscreen) to reject the subtitles being shown, nudge lyric
+  // timing, or turn subtitles off for this video. Choices are saved per video on this PC (via the bridge).
+  // Built with createElement/textContent only: YouTube enforces Trusted Types, so no innerHTML.
+
+  let current = null; // what we are showing: {kind: 'youtube'|'lyrics', id?, source?, label}
+  const ui = { button: null, menu: null, toast: null, toastTimer: null, style: null };
+
+  const UI_CSS = `
+.yhdx-sync-button { font-size: 20px !important; line-height: 1 !important; color: #fff; text-align: center;
+  vertical-align: top; opacity: .9; }
+.yhdx-sync-button:hover { opacity: 1; }
+.yhdx-sync-menu { position: absolute; right: 12px; bottom: 64px; z-index: 70; min-width: 270px; padding: 8px 0;
+  border-radius: 12px; background: rgba(28,28,28,.94); color: #eee; font: 500 13px/1.4 Roboto, Arial, sans-serif;
+  text-shadow: none; box-shadow: 0 4px 24px rgba(0,0,0,.5); }
+.yhdx-sync-menu .yhdx-head { padding: 6px 16px 8px; color: #aaa; font-weight: 400; border-bottom: 1px solid #3a3a3a;
+  margin-bottom: 4px; }
+.yhdx-sync-menu .yhdx-item { padding: 9px 16px; cursor: pointer; }
+.yhdx-sync-menu .yhdx-item:hover { background: rgba(255,255,255,.1); }
+.yhdx-toast { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); z-index: 71; padding: 8px 14px;
+  border-radius: 8px; background: rgba(28,28,28,.9); color: #fff; font: 500 14px Roboto, Arial, sans-serif;
+  pointer-events: none; }`;
+
+  function ensureUiStyle() {
+    if (ui.style) return;
+    ui.style = document.createElement('style');
+    ui.style.id = 'yhdx-ui-style';
+    ui.style.textContent = UI_CSS;
+    (document.head || document.documentElement).appendChild(ui.style);
+  }
+
+  const hasPrefs = () => {
+    const pr = state.prefs || {};
+    return Boolean(pr.off || pr.rejectYoutube || pr.rejectedLyrics?.length || pr.offset);
+  };
+
+  function setCurrent(value) {
+    current = value;
+    updateSyncButton();
+  }
+
+  function updateSyncButton() {
+    const p = getPlayer();
+    const controls = p?.querySelector?.('.ytp-right-controls');
+    if (!controls) return;
+    if (!ui.button || !controls.contains(ui.button)) {
+      ensureUiStyle();
+      const b = document.createElement('button');
+      b.className = 'ytp-button yhdx-sync-button';
+      b.setAttribute('title', 'Subtitles out of sync?');
+      b.setAttribute('aria-label', 'Subtitles out of sync?');
+      b.textContent = '⇄';
+      b.addEventListener('click', (e) => { e?.stopPropagation?.(); toggleMenu(); });
+      // Right next to YouTube's CC button when it exists; otherwise at the start of the right-hand controls.
+      const cc = controls.querySelector?.('.ytp-subtitles-button');
+      if (cc?.parentElement) cc.parentElement.insertBefore(b, cc);
+      else controls.prepend(b);
+      ui.button = b;
+    }
+    ui.button.style.display = current || hasPrefs() ? '' : 'none';
+  }
+
+  function closeMenu() {
+    ui.menu?.remove();
+    ui.menu = null;
+  }
+
+  function toggleMenu() {
+    if (ui.menu) { closeMenu(); return; }
+    const p = getPlayer();
+    if (!p) return;
+    ensureUiStyle();
+    const menu = document.createElement('div');
+    menu.className = 'yhdx-sync-menu';
+    menu.setAttribute('role', 'menu');
+    const head = document.createElement('div');
+    head.className = 'yhdx-head';
+    head.textContent = describeCurrent();
+    menu.appendChild(head);
+    for (const [label, action] of menuItems()) {
+      const item = document.createElement('div');
+      item.className = 'yhdx-item';
+      item.setAttribute('role', 'menuitem');
+      item.textContent = label;
+      item.addEventListener('click', (e) => { e?.stopPropagation?.(); closeMenu(); action(); });
+      menu.appendChild(item);
+    }
+    p.appendChild(menu);
+    ui.menu = menu;
+  }
+
+  function describeCurrent() {
+    const offset = Number(state.prefs?.offset) || 0;
+    if (state.prefs?.off) return 'Subtitles are off for this video';
+    if (current?.kind === 'youtube') return `Showing: ${current.label}`;
+    if (current?.kind === 'lyrics') {
+      const timing = offset ? ` · timing ${offset > 0 ? '+' : ''}${offset.toFixed(1)} s` : '';
+      return `Showing: lyrics from ${current.source}${current.label ? ` (${current.label})` : ''}${timing}`;
+    }
+    return 'No subtitles showing';
+  }
+
+  function menuItems() {
+    const items = [];
+    if (current?.kind === 'youtube') items.push(['Out of sync: try other subtitles', findOtherSubtitles]);
+    if (current?.kind === 'lyrics') {
+      items.push(['Out of sync: try other lyrics', findOtherSubtitles]);
+      items.push(['Show lyrics 0.5 s earlier', () => nudgeLyrics(-0.5)]);
+      items.push(['Show lyrics 0.5 s later', () => nudgeLyrics(+0.5)]);
+    }
+    if (current) items.push(['Turn subtitles off for this video', subtitlesOffForVideo]);
+    if (hasPrefs()) items.push(['Reset subtitles for this video', resetVideo]);
+    return items;
+  }
+
+  function savePrefs() {
+    if (!state.videoId) return;
+    window.postMessage({ __yhdx: 'prefs-save', videoId: state.videoId, prefs: state.prefs || {} }, location.origin);
+    updateSyncButton();
+  }
+
+  function findOtherSubtitles() {
+    const p = getPlayer();
+    const prefs = (state.prefs ||= {});
+    if (current?.kind === 'youtube') {
+      prefs.rejectYoutube = true;
+      captionsOff(p);
+    } else if (current?.kind === 'lyrics') {
+      if (current.id) prefs.rejectedLyrics = [...new Set([...(prefs.rejectedLyrics || []), current.id])];
+      prefs.offset = 0;
+      stopLyrics();
+    }
+    setCurrent(null);
+    savePrefs();
+    lyrics.requested = null;
+    if (requestLyrics(p, { announce: true })) toast('Looking for other subtitles…');
+    else toast('No other subtitles: song lyrics are turned off in the extension settings');
+  }
+
+  function nudgeLyrics(delta) {
+    const prefs = (state.prefs ||= {});
+    prefs.offset = Math.round(((Number(prefs.offset) || 0) + delta) * 10) / 10;
+    savePrefs();
+    toast(`Lyrics timing: ${prefs.offset > 0 ? '+' : ''}${prefs.offset.toFixed(1)} s`);
+  }
+
+  function subtitlesOffForVideo() {
+    (state.prefs ||= {}).off = true;
+    captionsOff(getPlayer());
+    stopLyrics();
+    setCurrent(null);
+    savePrefs();
+    toast('Subtitles off for this video');
+  }
+
+  function resetVideo() {
+    state.prefs = {};
+    stopLyrics();
+    lyrics.requested = null;
+    setCurrent(null);
+    savePrefs();
+    toast('Subtitles reset for this video');
+    state.captionsDone = false; // pick captions again from scratch
+    state.attempts = 0;
+    schedule();
+  }
+
+  function toast(text) {
+    const p = getPlayer();
+    if (!p) return;
+    ensureUiStyle();
+    clearTimeout(ui.toastTimer);
+    ui.toast?.remove();
+    const el = document.createElement('div');
+    el.className = 'yhdx-toast';
+    el.textContent = text;
+    p.appendChild(el);
+    ui.toast = el;
+    ui.toastTimer = setTimeout(() => { el.remove(); if (ui.toast === el) ui.toast = null; }, 3500);
   }
 
   // ---------- caption repair ----------
@@ -289,13 +496,23 @@
     const videoId = p?.getVideoData?.()?.video_id;
     if (!videoId) { schedule(); return; }
 
-    if (videoId !== state.videoId) state = freshState(videoId);
+    if (videoId !== state.videoId) {
+      state = freshState(videoId);
+      closeMenu();
+      setCurrent(null);
+    }
     if (lyrics.videoId && lyrics.videoId !== videoId) stopLyrics();
     if (p.classList.contains('ad-showing')) { state.sawAd = true; schedule(); return; } // wait for the real video
 
     state.attempts++;
     if (!state.qualityDone) state.qualityDone = applyQuality(p);
-    if (!state.captionsDone) state.captionsDone = applyCaptions(p);
+    if (!state.prefs) {
+      // This video's saved subtitle choices come from the bridge; wait up to ~1.5 s for them.
+      if (state.prefsWaits === 0) window.postMessage({ __yhdx: 'prefs-request', videoId }, location.origin);
+      if (!state.prefs && ++state.prefsWaits > 3) state.prefs = {};
+    }
+    if (state.prefs && !state.captionsDone) state.captionsDone = applyCaptions(p);
+    updateSyncButton();
 
     if (!(state.qualityDone && state.captionsDone) && state.attempts < MAX_ATTEMPTS) schedule();
   }
@@ -307,7 +524,11 @@
 
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data) return;
-    if (e.data.__yhdx === 'lyrics') { startLyrics(e.data.videoId, e.data.cues); return; }
+    if (e.data.__yhdx === 'lyrics') { onLyrics(e.data); return; }
+    if (e.data.__yhdx === 'prefs') {
+      if (e.data.videoId === state.videoId && !state.prefs) state.prefs = e.data.prefs || {};
+      return;
+    }
     if (e.data.__yhdx !== 'settings') return;
     settings = e.data.settings;
     if (!settings.lyricsWhenNoCaptions || settings.captions !== 'english') { stopLyrics(); lyrics.requested = null; }

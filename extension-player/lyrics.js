@@ -100,11 +100,12 @@ function yhdxParseSrt(srt) {
 
 // ---------------------------------------------------------------- matching
 
-/** Best LRCLIB result with synced lyrics whose length matches the video. */
-function yhdxPickLrclib(results, duration, tolerance = YHDX_LYRICS_TOLERANCE_S) {
+/** Best LRCLIB result with synced lyrics whose length matches the video (skipping ones the user rejected). */
+function yhdxPickLrclib(results, duration, tolerance = YHDX_LYRICS_TOLERANCE_S, exclude = []) {
   let best = null;
   for (const r of Array.isArray(results) ? results : []) {
     if (!r || r.instrumental || !r.syncedLyrics || typeof r.duration !== 'number') continue;
+    if (r.id != null && exclude.includes(`lrclib:${r.id}`)) continue;
     const diff = Math.abs(r.duration - duration);
     if (diff <= tolerance && (!best || diff < best.diff)) best = { r, diff };
   }
@@ -133,22 +134,25 @@ async function yhdxGetJson(fetchFn, url, init) {
   try { return await res.json(); } catch { throw new YhdxSourceError('bad JSON'); }
 }
 
-async function yhdxFromLrclib(candidates, duration, fetchFn) {
+async function yhdxFromLrclib(candidates, duration, fetchFn, exclude = []) {
   for (const c of candidates) {
     const url = `${YHDX_LRCLIB}/search?artist_name=${encodeURIComponent(c.artist)}&track_name=${encodeURIComponent(c.track)}`;
     const results = await yhdxGetJson(fetchFn, url, { headers: { Accept: 'application/json' } });
-    const hit = yhdxPickLrclib(results, duration);
+    const hit = yhdxPickLrclib(results, duration, YHDX_LYRICS_TOLERANCE_S, exclude);
     if (hit) {
       const cues = yhdxParseLrc(hit.syncedLyrics, duration);
       if (cues.length) {
-        return { source: 'LRCLIB', cues, matched: `${hit.artistName} - ${hit.trackName} (${Math.round(hit.duration)} s)` };
+        return {
+          source: 'LRCLIB', cues, id: hit.id != null ? `lrclib:${hit.id}` : null,
+          matched: `${hit.artistName} - ${hit.trackName} (${Math.round(hit.duration)} s)`,
+        };
       }
     }
   }
   return null;
 }
 
-async function yhdxFromOpenSubtitles(candidates, duration, apiKey, fetchFn) {
+async function yhdxFromOpenSubtitles(candidates, duration, apiKey, fetchFn, exclude = []) {
   const headers = { 'Api-Key': apiKey, Accept: 'application/json', 'X-User-Agent': 'YoutubeHDx v1' };
   for (const c of candidates) {
     const q = `${YHDX_OPENSUBS}/subtitles?languages=en&query=${encodeURIComponent(`${c.artist} ${c.track}`)}`;
@@ -158,7 +162,8 @@ async function yhdxFromOpenSubtitles(candidates, duration, apiKey, fetchFn) {
     const item = items.find((d) => {
       const a = d?.attributes;
       const title = yhdxNorm(a?.feature_details?.title || a?.feature_details?.movie_name || a?.release);
-      return a?.files?.[0]?.file_id && wanted && title.includes(wanted);
+      const fileId = a?.files?.[0]?.file_id;
+      return fileId && !exclude.includes(`os:${fileId}`) && wanted && title.includes(wanted);
     });
     if (!item) continue;
 
@@ -178,7 +183,10 @@ async function yhdxFromOpenSubtitles(candidates, duration, apiKey, fetchFn) {
     }
     const cues = yhdxParseSrt(srt);
     if (yhdxSubsFitVideo(cues, duration)) {
-      return { source: 'OpenSubtitles', cues, matched: item.attributes.feature_details?.title || c.track };
+      return {
+        source: 'OpenSubtitles', cues, id: `os:${item.attributes.files[0].file_id}`,
+        matched: item.attributes.feature_details?.title || c.track,
+      };
     }
   }
   return null;
@@ -188,14 +196,14 @@ async function yhdxFromOpenSubtitles(candidates, duration, apiKey, fetchFn) {
  * Finds lyrics for a video. Returns {cues, source, matched} or {cues: null, reason, retryable}.
  * retryable = a source was unreachable, so "no lyrics" must not be remembered for long.
  */
-async function yhdxFindLyrics({ title, author, duration }, { fetchFn, openSubtitlesKey } = {}) {
+async function yhdxFindLyrics({ title, author, duration }, { fetchFn, openSubtitlesKey, exclude = [] } = {}) {
   const candidates = yhdxParseVideoTitle(title, author);
   if (!candidates.length) return { cues: null, reason: 'could not tell artist and song from the title', retryable: false };
   if (!(duration > 0)) return { cues: null, reason: 'video length unknown', retryable: true };
 
   let retryable = false;
   try {
-    const hit = await yhdxFromLrclib(candidates, duration, fetchFn);
+    const hit = await yhdxFromLrclib(candidates, duration, fetchFn, exclude);
     if (hit) return hit;
   } catch (e) {
     if (!(e instanceof YhdxSourceError)) throw e;
@@ -204,7 +212,7 @@ async function yhdxFindLyrics({ title, author, duration }, { fetchFn, openSubtit
 
   if (openSubtitlesKey) {
     try {
-      const hit = await yhdxFromOpenSubtitles(candidates, duration, openSubtitlesKey, fetchFn);
+      const hit = await yhdxFromOpenSubtitles(candidates, duration, openSubtitlesKey, fetchFn, exclude);
       if (hit) return hit;
     } catch (e) {
       if (!(e instanceof YhdxSourceError)) throw e;

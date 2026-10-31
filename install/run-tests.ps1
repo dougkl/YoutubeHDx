@@ -7,7 +7,7 @@ dotnet run --project (Join-Path $root 'tests\YoutubeHDx.Tests') -c Release
 $dotnetFailed = $LASTEXITCODE
 
 Write-Host "`n== Extension (player, captions, background) ==" -ForegroundColor Cyan
-node --test (Join-Path $root 'tests\extension\extension.test.mjs') (Join-Path $root 'tests\extension\lyrics.test.mjs')
+node --test (Join-Path $root 'tests\extension\extension.test.mjs') (Join-Path $root 'tests\extension\lyrics.test.mjs') (Join-Path $root 'tests\extension\sync.test.mjs')
 $nodeFailed = $LASTEXITCODE
 
 if ($dotnetFailed -or $nodeFailed) { Write-Host "`nTests failed." -ForegroundColor Red; exit 1 }

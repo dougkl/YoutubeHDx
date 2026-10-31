@@ -57,3 +57,10 @@ $('reset').onclick = async () => { await chrome.storage.sync.set(YHDX_DEFAULTS);
 
 chrome.storage.sync.get(YHDX_DEFAULTS).then(fill);
 chrome.storage.local.get({ openSubtitlesKey: '' }).then((r) => { $('openSubtitlesKey').value = r.openSubtitlesKey; });
+
+$('resetVideoChoices').onclick = async () => {
+  const all = await chrome.storage.local.get(null);
+  const keys = Object.keys(all).filter((k) => k.startsWith('prefs:'));
+  if (keys.length) await chrome.storage.local.remove(keys);
+  flash(keys.length ? `Forgot choices for ${keys.length} video(s).` : 'No per-video choices saved.');
+};
