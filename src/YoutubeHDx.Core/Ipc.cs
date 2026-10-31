@@ -4,10 +4,10 @@ using System.Text.Json;
 
 namespace YoutubeHDx.Core;
 
-/// <summary>Commands: ping, enqueue, status, cancel, watch.</summary>
-public sealed record IpcRequest(string Command, string? Url = null, bool NoPlaylist = false, Guid? JobId = null);
+/// <summary>Commands: ping, enqueue, status, cancel, watch, pause (Minutes; null = until resumed), resume.</summary>
+public sealed record IpcRequest(string Command, string? Url = null, bool NoPlaylist = false, Guid? JobId = null, int? Minutes = null);
 
-public sealed record IpcResponse(bool Ok, string? Message = null, IReadOnlyList<JobSnapshot>? Jobs = null);
+public sealed record IpcResponse(bool Ok, string? Message = null, IReadOnlyList<JobSnapshot>? Jobs = null, PauseState? Pause = null);
 
 /// <summary>Line-delimited JSON over a per-user named pipe: one request, one response, then close.</summary>
 public sealed class IpcServer : IDisposable

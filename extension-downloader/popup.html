@@ -20,6 +20,22 @@
     <p id="result" role="status"></p>
   </section>
 
+  <section id="pausebar" hidden>
+    <div id="pause-idle">
+      <h2>Need the bandwidth? Pause downloads</h2>
+      <div class="pause-row">
+        <button class="secondary" data-minutes="15">15 min</button>
+        <button class="secondary" data-minutes="60">1 h</button>
+        <button class="secondary" data-minutes="180">3 h</button>
+        <button class="secondary" data-minutes="0">Until resumed</button>
+      </div>
+    </div>
+    <div id="pause-active" class="paused" hidden>
+      <span id="pause-text">Paused</span>
+      <button id="resume">Resume now</button>
+    </div>
+  </section>
+
   <section>
     <h2>Downloads</h2>
     <ul id="jobs"><li class="muted">Loading…</li></ul>

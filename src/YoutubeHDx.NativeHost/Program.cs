@@ -20,6 +20,7 @@ internal static class Program
         string? Url = null,
         bool NoPlaylist = false,
         Guid? JobId = null,
+        int? Minutes = null,
         List<BrowserCookie>? Cookies = null);
 
     private static async Task<int> Main()
@@ -71,6 +72,10 @@ internal static class Program
                 return await SendToAppAsync(new IpcRequest("cancel", JobId: r.JobId));
             case "status":
                 return await SendToAppAsync(new IpcRequest("status"), startIfNeeded: false);
+            case "pause":
+                return await SendToAppAsync(new IpcRequest("pause", Minutes: r.Minutes), startIfNeeded: false);
+            case "resume":
+                return await SendToAppAsync(new IpcRequest("resume"), startIfNeeded: false);
             case "ping":
                 return new IpcResponse(true, "Host OK.");
             default:

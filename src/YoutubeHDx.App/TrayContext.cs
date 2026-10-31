@@ -12,6 +12,9 @@ internal sealed class TrayContext : ApplicationContext
     private readonly WatchScheduler _watcher;
     private readonly SynchronizationContext _ui;
     private MainForm? _form;
+    private ToolStripMenuItem _pauseMenu = null!;
+    private ToolStripMenuItem _resumeItem = null!;
+    private readonly System.Windows.Forms.Timer _pauseTicker = new() { Interval = 15_000 };
 
     public TrayContext()
     {
@@ -47,6 +50,11 @@ internal sealed class TrayContext : ApplicationContext
         };
         _tray.DoubleClick += (_, _) => ShowForm();
 
+        _queue.PauseChanged += state => _ui.Post(_ => OnPauseChanged(state, announce: true), null);
+        _pauseTicker.Tick += (_, _) => OnPauseChanged(_queue.PauseState, announce: false); // also ends timed pauses
+        _pauseTicker.Start();
+        OnPauseChanged(_queue.PauseState, announce: false);
+
         // Record why the app goes away, so a stopped downloader is never a mystery.
         Microsoft.Win32.SystemEvents.SessionEnding += (_, e) => _exitReason = $"Windows {e.Reason} (sign-out or shutdown)";
         AppDomain.CurrentDomain.UnhandledException += (_, e) => FileLog.Write($"Unhandled exception, app terminating: {e.ExceptionObject}");
@@ -66,6 +74,15 @@ internal sealed class TrayContext : ApplicationContext
             _tray.ShowBalloonTip(3000, "YoutubeHDx", n == 0 ? "Nothing new to queue." : $"Queued {n} playlist(s).", ToolTipIcon.Info);
         });
         menu.Items.Add(new ToolStripSeparator());
+
+        _pauseMenu = new ToolStripMenuItem("Pause downloads");
+        foreach (var (label, minutes) in PauseChoices)
+            _pauseMenu.DropDownItems.Add(label, null, (_, _) => _queue.Pause(minutes is { } m ? TimeSpan.FromMinutes(m) : null));
+        menu.Items.Add(_pauseMenu);
+        _resumeItem = new ToolStripMenuItem("Resume downloads", null, (_, _) => _queue.Resume());
+        menu.Items.Add(_resumeItem);
+
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open NAS folder", null, (_, _) => SafeRun(() => Open(SettingsStore.Load().NasPath)));
         menu.Items.Add("Edit settings…", null, (_, _) => SafeRun(() => { SettingsStore.Load(); Open(AppPaths.SettingsFile); }));
         menu.Items.Add("Open log", null, (_, _) => SafeRun(() => Open(AppPaths.LogFile)));
@@ -75,6 +92,23 @@ internal sealed class TrayContext : ApplicationContext
     }
 
     internal DownloadQueue Queue => _queue;
+
+    /// <summary>Pause lengths offered in the tray and the extension. null = until resumed.</summary>
+    internal static readonly (string Label, int? Minutes)[] PauseChoices =
+    [
+        ("For 15 minutes", 15), ("For 1 hour", 60), ("For 3 hours", 180), ("For 8 hours", 480), ("Until I resume", null),
+    ];
+
+    private void OnPauseChanged(PauseState state, bool announce)
+    {
+        _resumeItem.Enabled = state.IsPaused;
+        _pauseMenu.Text = state.IsPaused ? "Pause downloads (change)" : "Pause downloads";
+        var text = "YoutubeHDx: " + state.Describe();
+        _tray.Text = text.Length > 63 ? text[..63] : text; // NotifyIcon limit
+        if (announce)
+            _tray.ShowBalloonTip(3000, "YoutubeHDx",
+                state.IsPaused ? $"{state.Describe()}. Your bandwidth is free." : "Downloads resumed.", ToolTipIcon.Info);
+    }
 
     private IpcResponse HandleIpc(IpcRequest r)
     {
@@ -92,7 +126,18 @@ internal sealed class TrayContext : ApplicationContext
             }
 
             case "status":
-                return new IpcResponse(true, Jobs: _queue.Snapshot().OrderByDescending(j => j.CreatedAt).Take(25).ToList());
+                return new IpcResponse(true, Jobs: _queue.Snapshot().OrderByDescending(j => j.CreatedAt).Take(25).ToList(),
+                    Pause: _queue.PauseState);
+
+            case "pause":
+            {
+                if (r.Minutes is <= 0) throw new ArgumentException("Pause length must be positive.");
+                var state = _queue.Pause(r.Minutes is { } m ? TimeSpan.FromMinutes(m) : null);
+                return new IpcResponse(true, state.Describe() + ".", Pause: state);
+            }
+
+            case "resume":
+                return new IpcResponse(true, "Downloads resumed.", Pause: _queue.Resume());
 
             case "cancel":
                 return r.JobId is { } id && _queue.Cancel(id)
@@ -160,6 +205,7 @@ internal sealed class TrayContext : ApplicationContext
     protected override void ExitThreadCore()
     {
         FileLog.Write($"YoutubeHDx app stopping: {_exitReason}");
+        _pauseTicker.Stop();
         _tray.Visible = false;
         _tray.Dispose();
         _watcher.Dispose();

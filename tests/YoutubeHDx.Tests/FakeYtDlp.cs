@@ -39,6 +39,15 @@ internal static class FakeYtDlp
                 Console.Error.WriteLine("ERROR: [youtube] vid9: Sign in to confirm your age");
                 return 1;
 
+            case "slow-then-ok":
+                // First run: hangs like a long download (so a pause can interrupt it). Later runs: succeed.
+                var marker = (Environment.GetEnvironmentVariable(ArgsFileVariable) ?? "args.txt") + ".ran";
+                if (File.Exists(marker)) goto case "ok";
+                await File.WriteAllTextAsync(marker, "1");
+                Out("[HDXSTART]vid1|First Video");
+                await Task.Delay(TimeSpan.FromSeconds(30));
+                return 0;
+
             case "slow":
                 Out("[HDXSTART]vid1|Slow Video");
                 await Task.Delay(TimeSpan.FromSeconds(30));

@@ -1,6 +1,7 @@
 namespace YoutubeHDx.Core;
 
-public enum JobStatus { Queued, Running, Completed, CompletedWithErrors, Failed, Canceled }
+/// <summary>Paused = interrupted by a pause; it runs again (resuming partial files) when downloads resume.</summary>
+public enum JobStatus { Queued, Running, Paused, Completed, CompletedWithErrors, Failed, Canceled }
 
 public sealed record JobSnapshot(
     Guid Id,
@@ -36,7 +37,10 @@ public sealed class DownloadJob
     public string? LastFile { get; private set; }
     public string? Error { get; private set; }
 
-    public bool IsActive => Status is JobStatus.Queued or JobStatus.Running;
+    public bool IsActive => Status is JobStatus.Queued or JobStatus.Running or JobStatus.Paused;
+
+    /// <summary>Set when the user cancels a running job, to tell it apart from a pause or shutdown.</summary>
+    internal bool CancelRequested { get; set; }
     public bool IsFinished => !IsActive;
 
     internal void MarkRunning() { lock (_gate) Status = JobStatus.Running; }
@@ -52,11 +56,16 @@ public sealed class DownloadJob
         }
     }
 
+    internal void MarkPaused()
+    {
+        lock (_gate) { Status = JobStatus.Paused; Speed = null; Eta = null; }
+    }
+
     internal bool TryCancelQueued()
     {
         lock (_gate)
         {
-            if (Status != JobStatus.Queued) return false;
+            if (Status is not (JobStatus.Queued or JobStatus.Paused)) return false;
             Status = JobStatus.Canceled;
             return true;
         }

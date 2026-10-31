@@ -50,6 +50,8 @@ Run the downloader on one PC only. The download history (`.youtubehdx-archive.tx
 - **Downloader popup** (server): *Download this video in 4K*, *Download whole playlist*, or *Auto-sync this playlist*. Shows sign-in state and live progress.
 - **Right-click** any YouTube link or video page → *Download in 4K to NAS*.
 - **Tray app**: paste URLs, cancel jobs, sync watched playlists now, open the NAS folder or the log.
+- **Pause**: tray icon → *Pause downloads* (15 min, 1 h, 3 h, 8 h, or until you resume), or the pause buttons in the Downloader popup. The running download stops at once so your bandwidth is free; *Resume downloads* (or the end of the pause time) continues it from its partial file. A pause survives app restarts.
+- **Crash-safe**: unfinished jobs are saved to `queue.json` and come back when the app restarts (after a crash, sign-out or reboot). Finished videos are recorded in `.youtubehdx-archive.txt` on the NAS and never downloaded twice; half-done videos continue from their `.part` file in the temp folder.
 - **Auto-sync**: watched playlists are checked every `watchIntervalMinutes`. Already-downloaded videos are skipped via `.youtubehdx-archive.txt` on the NAS.
 - **Player** (playback PC): defaults to the highest resolution, human-made English captions only, and 14px yellow outlined captions with no background box. Click the YoutubeHDx Player icon to change quality, caption behaviour, caption language order, and font/size/colours (live preview).
 

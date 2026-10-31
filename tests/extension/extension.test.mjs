@@ -318,6 +318,20 @@ describe('background: talking to the host', () => {
     assert.equal(bg.badges[0], '!');
   });
 
+  test('pause and resume are forwarded to the app', async () => {
+    const bg = loadBackground();
+    await bg.message({ type: 'pause', minutes: 60 });
+    await bg.message({ type: 'pause', minutes: null });
+    await bg.message({ type: 'pause', minutes: -5 });
+    await bg.message({ type: 'resume' });
+    assert.deepEqual(plain(bg.sent.map((s) => s.msg)), [
+      { type: 'pause', minutes: 60 },
+      { type: 'pause', minutes: null },  // until resumed
+      { type: 'pause', minutes: null },  // invalid length never becomes a negative pause
+      { type: 'resume' },
+    ]);
+  });
+
   test('status and cancel are forwarded without cookies', async () => {
     const bg = loadBackground({ cookies: [cookie] });
     await bg.message({ type: 'status' });

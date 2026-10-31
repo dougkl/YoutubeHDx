@@ -20,6 +20,11 @@ public static class AppPaths
 
     public static string LogFile => Path.Combine(DataDir, "youtubehdx.log");
 
+    public static string PauseFile => Path.Combine(DataDir, "pause.json");
+
+    /// <summary>Jobs not finished yet, so they survive a crash or restart.</summary>
+    public static string QueueFile => Path.Combine(DataDir, "queue.json");
+
     /// <summary>
     /// Per-user pipe name; the pipe is also created with CurrentUserOnly. When the data folder is overridden
     /// (tests), the name includes a hash of that folder so it can never reach the real running app.

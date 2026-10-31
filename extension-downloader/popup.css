@@ -32,3 +32,11 @@ li.job .bar > i { display: block; height: 100%; background: var(--accent); }
 .s-completed { color: var(--ok); } .s-failed { color: var(--err); } .s-completedWithErrors { color: var(--warn); }
 li.job .cancel { background: none; border: 0; padding: 0; margin: 0; width: auto; display: inline; color: var(--muted); font-weight: 400; font-size: 12px; }
 li.job .cancel:hover { color: var(--err); }
+
+.pause-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.pause-row button { margin: 0; padding: 7px 4px; font-size: 12px; }
+.paused { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px;
+  padding: 8px 10px; border-radius: 8px; background: #3a2f12; border: 1px solid #6b5420; color: var(--warn); }
+.paused button { width: auto; margin: 0; padding: 6px 12px; background: var(--warn); color: #1b1300; }
+.s-paused { color: var(--warn); }
+[hidden] { display: none !important; }

@@ -68,6 +68,7 @@ internal static class Runner
             var name = $"{m.DeclaringType!.Name}.{m.Name}";
             try
             {
+                TestEnv.ResetAppState();
                 var result = m.Invoke(null, null);
                 if (result is Task task) await task.WaitAsync(TimeSpan.FromSeconds(30));
                 Console.WriteLine($"  PASS  {name}");

@@ -2,7 +2,7 @@ const $ = (id) => document.getElementById(id);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
 const STATUS_LABEL = {
-  queued: 'Queued', running: 'Downloading', completed: 'Saved', completedWithErrors: 'Saved with errors',
+  queued: 'Queued', running: 'Downloading', paused: 'Paused', completed: 'Saved', completedWithErrors: 'Saved with errors',
   failed: 'Failed', canceled: 'Canceled',
 };
 
@@ -88,7 +88,7 @@ function renderJobs(reply) {
       bar.append(fill);
       li.append(bar);
     }
-    if (j.status === 'running' || j.status === 'queued') {
+    if (j.status === 'running' || j.status === 'queued' || j.status === 'paused') {
       const c = document.createElement('button');
       c.className = 'cancel';
       c.textContent = 'Cancel';
@@ -99,8 +99,35 @@ function renderJobs(reply) {
   }
 }
 
+function renderPause(reply) {
+  const bar = $('pausebar');
+  bar.hidden = !reply?.ok; // only when the app is reachable
+  if (!reply?.ok) return;
+  const p = reply.pause || { isPaused: false };
+  $('pause-idle').hidden = p.isPaused;
+  $('pause-active').hidden = !p.isPaused;
+  if (p.isPaused) {
+    $('pause-text').textContent = p.until
+      ? `Paused until ${new Date(p.until).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+      : 'Paused until you resume';
+  }
+}
+
+async function pauseFor(minutes) {
+  const r = await send({ type: 'pause', minutes });
+  showResult(r);
+  refreshJobs();
+}
+
+for (const b of document.querySelectorAll('#pause-idle button')) {
+  b.onclick = () => pauseFor(Number(b.dataset.minutes) || null);
+}
+$('resume').onclick = async () => { showResult(await send({ type: 'resume' })); refreshJobs(); };
+
 async function refreshJobs() {
-  renderJobs(await send({ type: 'status' }));
+  const reply = await send({ type: 'status' });
+  renderPause(reply);
+  renderJobs(reply);
 }
 
 async function checkLogin() {

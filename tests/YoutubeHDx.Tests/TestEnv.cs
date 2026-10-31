@@ -49,6 +49,7 @@ internal static class TestEnv
         Environment.SetEnvironmentVariable(FakeYtDlp.ArgsFileVariable, ArgsFile);
         Environment.SetEnvironmentVariable(FakeYtDlp.NasVariable, Nas);
         if (File.Exists(ArgsFile)) File.Delete(ArgsFile);
+        if (File.Exists(ArgsFile + ".ran")) File.Delete(ArgsFile + ".ran");
 
         var exe = Environment.ProcessPath
                   ?? throw new InvalidOperationException("Cannot find the test exe to use as fake yt-dlp.");
@@ -58,6 +59,13 @@ internal static class TestEnv
         var s = new AppSettings { NasPath = Nas, TempPath = Temp, YtDlpPath = exe, RequireLogin = false };
         SettingsStore.Save(s);
         return s;
+    }
+
+    /// <summary>Clears saved pause and queue state so every test starts from a clean, unpaused, empty queue.</summary>
+    public static void ResetAppState()
+    {
+        foreach (var f in new[] { AppPaths.PauseFile, AppPaths.QueueFile })
+            if (File.Exists(f)) File.Delete(f);
     }
 
     /// <summary>Arguments the fake received, one per line, exactly as passed.</summary>

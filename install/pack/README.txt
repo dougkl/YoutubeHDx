@@ -21,6 +21,10 @@ Then, in Chrome on the server (one time):
      (the path is on your clipboard)
   3. Click the extension icon: green "Signed in" = downloads use your account.
 
+Need your bandwidth? Tray icon -> Pause downloads (15 min ... until you resume), or the
+pause buttons in the Downloader popup. Resume picks up exactly where it stopped, and
+unfinished downloads also continue after a crash or reboot.
+
 The server must stay logged in to Windows (the app lives in the tray).
 Settings: tray icon -> Edit settings...   Log: tray icon -> Open log.
 

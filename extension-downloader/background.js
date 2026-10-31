@@ -134,6 +134,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       case 'watch': return watchPlaylist(msg.url);
       case 'status': return callHost({ type: 'status' });
       case 'cancel': return callHost({ type: 'cancel', jobId: msg.jobId });
+      case 'pause': return callHost({ type: 'pause', minutes: Number.isInteger(msg.minutes) && msg.minutes > 0 ? msg.minutes : null });
+      case 'resume': return callHost({ type: 'resume' });
       default: return { ok: false, message: 'Unknown request.' };
     }
   })().then(sendResponse, (e) => sendResponse({ ok: false, message: String(e?.message || e) }));
