@@ -38,6 +38,14 @@
         <input type="text" id="captionLanguages" placeholder="en, en-US, en-GB">
       </label>
       <p class="muted small">If a video only has auto-generated English captions, captions stay off.</p>
+      <label class="row"><input type="checkbox" id="lyricsWhenNoCaptions"> No proper captions? Show the song's synced lyrics instead</label>
+      <p class="muted small">Looked up on LRCLIB (free) by artist and song from the video title, and shown only when the song's
+        length matches the video, so the timing lines up. Only the title and length are sent.</p>
+      <label class="field">OpenSubtitles API key (optional fallback)
+        <input type="password" id="openSubtitlesKey" autocomplete="off" placeholder="Leave empty to use LRCLIB only">
+      </label>
+      <p class="muted small">Get a key from your OpenSubtitles account (opensubtitles.com/consumers). Free accounts have a small
+        daily download limit. The key stays on this PC.</p>
     </section>
 
     <section>

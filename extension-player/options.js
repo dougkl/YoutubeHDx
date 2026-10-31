@@ -6,6 +6,7 @@ function fill(s) {
   $('quality').value = s.quality;
   $('captions').value = s.captions;
   $('captionLanguages').value = (s.captionLanguages || []).join(', ');
+  $('lyricsWhenNoCaptions').checked = s.lyricsWhenNoCaptions;
   $('hideEndCards').checked = s.hideEndCards;
   $('hideEndScreen').checked = s.hideEndScreen;
   $('hideComments').checked = s.hideComments;
@@ -24,6 +25,7 @@ function read() {
     quality: $('quality').value,
     captions: $('captions').value,
     captionLanguages: $('captionLanguages').value.split(',').map((x) => x.trim()).filter(Boolean),
+    lyricsWhenNoCaptions: $('lyricsWhenNoCaptions').checked,
     hideEndCards: $('hideEndCards').checked,
     hideEndScreen: $('hideEndScreen').checked,
     hideComments: $('hideComments').checked,
@@ -45,7 +47,13 @@ function flash(text) {
 }
 
 document.addEventListener('input', preview);
-$('save').onclick = async () => { await chrome.storage.sync.set(read()); flash('Saved. Open YouTube tabs update right away.'); };
+$('save').onclick = async () => {
+  await chrome.storage.sync.set(read());
+  // The API key is a credential: kept in this PC's local storage, never synced to the Google account.
+  await chrome.storage.local.set({ openSubtitlesKey: $('openSubtitlesKey').value.trim() });
+  flash('Saved. Open YouTube tabs update right away.');
+};
 $('reset').onclick = async () => { await chrome.storage.sync.set(YHDX_DEFAULTS); fill(YHDX_DEFAULTS); flash('Defaults restored.'); };
 
 chrome.storage.sync.get(YHDX_DEFAULTS).then(fill);
+chrome.storage.local.get({ openSubtitlesKey: '' }).then((r) => { $('openSubtitlesKey').value = r.openSubtitlesKey; });

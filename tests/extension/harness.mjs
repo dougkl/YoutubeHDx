@@ -26,8 +26,13 @@ export function loadDefaults() {
 // ---------------- fake YouTube player page (for content-main.js) ----------------
 
 export class FakePlayer {
-  constructor({ videoId = 'vid1', levels = ['hd2160', 'hd1440', 'hd1080', 'hd720', 'auto'], tracks = [], lazyTracks = false } = {}) {
+  constructor({ videoId = 'vid1', levels = ['hd2160', 'hd1440', 'hd1080', 'hd720', 'auto'], tracks = [], lazyTracks = false,
+                title = 'Peter Schilling - Major Tom (Coming Home) (Official Video)', author = 'Peter Schilling', duration = 300 } = {}) {
     this.videoId = videoId;
+    this.title = title;
+    this.author = author;
+    this.duration = duration;
+    this.children = [];
     this.levels = levels;
     this.tracks = tracks;
     this.lazyTracks = lazyTracks;      // tracklist empty until loadModule('captions')
@@ -38,7 +43,9 @@ export class FakePlayer {
     this.calls = [];
     this.classList = { contains: (c) => c === 'ad-showing' && this.ad };
   }
-  getVideoData() { return { video_id: this.videoId }; }
+  getVideoData() { return { video_id: this.videoId, title: this.title, author: this.author }; }
+  getDuration() { return this.duration; }
+  appendChild(el) { this.children.push(el); el.parent = this; }
   getAvailableQualityLevels() { return this.levels; }
   setPlaybackQualityRange(a, b) { this.calls.push(['setPlaybackQualityRange', a, b]); }
   setPlaybackQuality(q) { this.calls.push(['setPlaybackQuality', q]); }
@@ -70,10 +77,16 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
     documentElement: { appendChild: (el) => elements.set(el.id, el) },
     getElementById: (id) => (id === 'movie_player' ? page.player : elements.get(id) ?? null),
     createElement: (tag) => {
-      const el = { tagName: tag.toUpperCase(), id: '', textContent: '' };
-      el.remove = () => elements.delete(el.id);
+      const el = { tagName: tag.toUpperCase(), id: '', className: '', textContent: '', style: {}, children: [] };
+      el.appendChild = (child) => { el.children.push(child); child.parent = el; };
+      el.remove = () => {
+        elements.delete(el.id);
+        if (el.parent?.children) el.parent.children = el.parent.children.filter((c) => c !== el);
+        el.removed = true;
+      };
       return el;
     },
+    querySelector: (sel) => (sel.includes(':not(.yhdx-lyrics)') && page.youtubeCaptionsShowing ? {} : null),
     addEventListener: (type, fn) => (docListeners[type] ??= []).push(fn),
   };
 
@@ -85,6 +98,13 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
   const page = {
     player,
     posted,
+    youtubeCaptionsShowing: false,
+    /** The bridge answering a lyrics request. */
+    sendLyrics(videoId, cues) {
+      for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'lyrics', videoId, cues } });
+    },
+    /** The lyrics line the extension drew (or undefined). */
+    lyricsWindow() { return page.player.children.find((c) => c.className === 'yhdx-lyrics-window' && !c.removed); },
     elements,
     HTMLVideoElement,
     location: { pathname, origin: 'https://www.youtube.com' },
@@ -137,11 +157,53 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
   return page;
 }
 
-/** Runs defaults.js + content-bridge.js (isolated world) with the given saved settings; returns what it posts. */
-export async function runBridge(saved = {}) {
-  const posted = [];
-  const window = { addEventListener: () => {}, postMessage: (data) => posted.push(data) };
+/** lyrics.js functions. */
+export function loadLyrics() {
+  const ctx = vm.createContext({ URL, encodeURIComponent, JSON, Error });
+  vm.runInContext(playerSource('lyrics.js') + `
+;globalThis.__l = { yhdxParseVideoTitle, yhdxParseLrc, yhdxParseSrt, yhdxPickLrclib, yhdxSubsFitVideo, yhdxFindLyrics,
+                    yhdxCleanAuthor };`, ctx);
+  return ctx.__l;
+}
+
+/** Player background.js with lyrics.js (importScripts) and fake chrome storage + fetch. */
+export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () => Date.now() } = {}) {
+  const local = { openSubtitlesKey };
+  let onMessage;
   const chrome = {
+    action: { onClicked: { addListener: () => {} } },
+    runtime: { openOptionsPage: () => {}, onMessage: { addListener: (fn) => { onMessage = fn; } } },
+    storage: {
+      local: {
+        get: async (q) => {
+          if (typeof q === 'string') return q in local ? { [q]: local[q] } : {};
+          const out = { ...q };
+          for (const k of Object.keys(q)) if (k in local) out[k] = local[k];
+          return out;
+        },
+        set: async (obj) => Object.assign(local, obj),
+      },
+    },
+  };
+  const ctx = vm.createContext({
+    chrome, URL, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
+    Date: { now },
+  });
+  ctx.importScripts = (name) => vm.runInContext(playerSource(name), ctx);
+  vm.runInContext(playerSource('background.js'), ctx);
+  return {
+    local,
+    ask: (msg) => new Promise((resolve) => onMessage({ type: 'lyrics', ...msg }, {}, resolve)),
+  };
+}
+
+/** Runs defaults.js + content-bridge.js (isolated world) with the given saved settings; returns what it posts. */
+export async function runBridge(saved = {}, { lyricsReply = null, onSend = () => {} } = {}) {
+  const posted = [];
+  const listeners = [];
+  const window = { addEventListener: (t, fn) => listeners.push(fn), postMessage: (data) => posted.push(data) };
+  const chrome = {
+    runtime: { sendMessage: async (msg) => { onSend(msg); return lyricsReply; } },
     storage: {
       sync: { get: async (defaults) => ({ ...structuredClone(defaults), ...saved }) },
       onChanged: { addListener: () => {} },
@@ -150,6 +212,7 @@ export async function runBridge(saved = {}) {
   const ctx = vm.createContext({ window, chrome, location: { origin: 'https://www.youtube.com' }, structuredClone });
   vm.runInContext(playerSource('defaults.js') + '\n' + playerSource('content-bridge.js'), ctx);
   await new Promise((r) => setImmediate(r));
+  posted.receive = async (data) => { for (const fn of listeners) fn({ source: window, data }); await new Promise((r) => setImmediate(r)); };
   return posted;
 }
 

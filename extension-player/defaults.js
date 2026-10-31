@@ -6,6 +6,7 @@ const YHDX_DEFAULTS = {
   quality: 'highres',           // highres (best the video has) | hd2160 | hd1440 | hd1080 | hd720
   captions: 'english',          // english (human-made only) | off | leave
   captionLanguages: ['en', 'en-US', 'en-GB'],
+  lyricsWhenNoCaptions: true,   // no human-made English captions? show synced song lyrics (LRCLIB / OpenSubtitles)
   hideEndCards: true,           // video/channel/playlist boxes over the last seconds + "i" info-card teasers
   hideEndScreen: true,          // suggestions wall when a video ends (autoplay countdown stays, so it can be canceled)
   hideComments: true,           // comments under the video (and the comments panel on Shorts)
@@ -59,7 +60,9 @@ function yhdxBuildCaptionCss(style) {
 function yhdxBuildHideCss(settings) {
   const rules = [];
   if (settings?.hideEndCards) {
-    rules.push('.ytp-ce-element, .ytp-cards-teaser, .ytp-cards-button { display: none !important; }');
+    // Every end-card piece is "ytp-ce-*" (cards and their "Hide" button). Scoped to descendants, so the player
+    // itself (it carries "ytp-ce-shown" while cards are up) is never hidden.
+    rules.push('#movie_player [class*="ytp-ce-"], .ytp-cards-teaser, .ytp-cards-button { display: none !important; }');
   }
   if (settings?.hideEndScreen) {
     rules.push('.html5-endscreen.videowall-endscreen, .ytp-endscreen-content { display: none !important; }');

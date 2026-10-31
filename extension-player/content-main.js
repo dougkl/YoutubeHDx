@@ -61,7 +61,7 @@
 
     if (!tracks.length) {
       p.loadModule?.('captions'); // track list is only populated once the captions module is loaded
-      if (state.attempts >= CAPTION_GIVE_UP) { captionsOff(p); return true; } // no captions on this video
+      if (state.attempts >= CAPTION_GIVE_UP) { captionsOff(p); requestLyrics(p); return true; } // no captions at all
       return false;
     }
 
@@ -79,8 +79,68 @@
       lastPick = { videoId: state.videoId, track: pick };
     } else {
       captionsOff(p); // only auto-generated English exists: keep captions off
+      requestLyrics(p);
     }
     return true;
+  }
+
+  // ---------- lyrics for videos without proper captions ----------
+  // The isolated-world bridge asks the service worker (LRCLIB, then OpenSubtitles); we draw the lines here
+  // with YouTube's caption class, so the user's caption style applies to them too.
+
+  const LYRICS_TICK_MS = 200;
+  let lyrics = { videoId: null, requested: null, cues: null, el: null, span: null, timer: null, durationTries: 0 };
+
+  function requestLyrics(p) {
+    if (!settings?.lyricsWhenNoCaptions || settings.captions !== 'english') return;
+    const vd = p?.getVideoData?.() || {};
+    if (!vd.video_id || lyrics.requested === vd.video_id) return;
+    const duration = Number(p.getDuration?.()) || 0;
+    if (!(duration > 0)) {
+      if (lyrics.durationTries++ < 10) setTimeout(() => requestLyrics(getPlayer()), 1000); // metadata not loaded yet
+      return;
+    }
+    lyrics.requested = vd.video_id;
+    lyrics.durationTries = 0;
+    window.postMessage({ __yhdx: 'lyrics-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration },
+      location.origin);
+  }
+
+  function stopLyrics() {
+    clearTimeout(lyrics.timer);
+    lyrics.el?.remove();
+    lyrics = { ...lyrics, videoId: null, cues: null, el: null, span: null, timer: null };
+  }
+
+  function startLyrics(videoId, cues) {
+    const p = getPlayer();
+    if (!Array.isArray(cues) || !cues.length || !p || p.getVideoData?.()?.video_id !== videoId) return;
+    stopLyrics();
+    const el = document.createElement('div');
+    el.className = 'yhdx-lyrics-window';
+    el.style.cssText = 'position:absolute;left:0;right:0;bottom:10%;text-align:center;pointer-events:none;z-index:40;display:none;';
+    const span = document.createElement('span');
+    span.className = 'ytp-caption-segment yhdx-lyrics';
+    // Fallback look if the custom caption style is off; the user's style (!important) overrides these.
+    span.style.cssText = 'display:inline-block;padding:2px 8px;white-space:pre-line;color:#fff;font-size:20px;' +
+      'background:rgba(8,8,8,.75);font-family:"YouTube Noto",Roboto,Arial,sans-serif;';
+    el.appendChild(span);
+    p.appendChild(el);
+    lyrics = { ...lyrics, videoId, cues: cues.filter((c) => c && c.end > c.start && c.text), el, span };
+    renderLyrics();
+  }
+
+  function renderLyrics() {
+    const p = getPlayer();
+    if (!lyrics.cues || !p || p.getVideoData?.()?.video_id !== lyrics.videoId) { stopLyrics(); return; }
+    // Never on top of an ad or of YouTube's own captions (e.g. if the user turns CC on by hand).
+    const ownCaptions = document.querySelector('.ytp-caption-segment:not(.yhdx-lyrics)');
+    const t = Number(p.getCurrentTime?.()) || 0;
+    const cue = p.classList.contains('ad-showing') || ownCaptions ? null : lyrics.cues.find((c) => t >= c.start && t < c.end);
+    const text = cue?.text ?? '';
+    if (lyrics.span.textContent !== text) lyrics.span.textContent = text;
+    lyrics.el.style.display = text ? '' : 'none';
+    lyrics.timer = setTimeout(renderLyrics, LYRICS_TICK_MS);
   }
 
   // ---------- caption repair ----------
@@ -230,6 +290,7 @@
     if (!videoId) { schedule(); return; }
 
     if (videoId !== state.videoId) state = freshState(videoId);
+    if (lyrics.videoId && lyrics.videoId !== videoId) stopLyrics();
     if (p.classList.contains('ad-showing')) { state.sawAd = true; schedule(); return; } // wait for the real video
 
     state.attempts++;
@@ -245,8 +306,11 @@
   }
 
   window.addEventListener('message', (e) => {
-    if (e.source !== window || !e.data || e.data.__yhdx !== 'settings') return;
+    if (e.source !== window || !e.data) return;
+    if (e.data.__yhdx === 'lyrics') { startLyrics(e.data.videoId, e.data.cues); return; }
+    if (e.data.__yhdx !== 'settings') return;
     settings = e.data.settings;
+    if (!settings.lyricsWhenNoCaptions || settings.captions !== 'english') { stopLyrics(); lyrics.requested = null; }
     captionCss = e.data.captionCss || '';
     applyStyle();
     restart();

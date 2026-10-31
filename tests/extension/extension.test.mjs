@@ -355,23 +355,30 @@ describe('hiding end cards and the end screen', () => {
     assert.equal(YHDX_DEFAULTS.hideComments, true);
     assert.match(yhdxBuildHideCss(YHDX_DEFAULTS), /ytd-comments#comments[^{]*\{ display: none !important; \}/);
     const css = yhdxBuildHideCss(YHDX_DEFAULTS);
-    assert.match(css, /\.ytp-ce-element[^{]*\{ display: none !important; \}/);
+    assert.match(css, /#movie_player \[class\*="ytp-ce-"\][^{]*\{ display: none !important; \}/);
     assert.match(css, /\.ytp-cards-teaser/);
     assert.match(css, /\.html5-endscreen\.videowall-endscreen[^{]*\{ display: none !important; \}/);
   });
 
   test('each switch is independent', () => {
     const cardsOnly = yhdxBuildHideCss({ hideEndCards: true, hideEndScreen: false });
-    assert.match(cardsOnly, /ytp-ce-element/);
+    assert.match(cardsOnly, /ytp-ce-/);
     assert.doesNotMatch(cardsOnly, /endscreen/);
     const commentsOnly = yhdxBuildHideCss({ hideComments: true });
     assert.match(commentsOnly, /ytd-comments#comments/);
     assert.match(commentsOnly, /engagement-panel-comments-section/);
-    assert.doesNotMatch(commentsOnly, /ytp-ce-element|videowall/);
+    assert.doesNotMatch(commentsOnly, /ytp-ce-|videowall/);
     const wallOnly = yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: true });
     assert.match(wallOnly, /videowall-endscreen/);
-    assert.doesNotMatch(wallOnly, /ytp-ce-element/);
+    assert.doesNotMatch(wallOnly, /ytp-ce-/);
     assert.equal(yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: false, hideComments: false }), '');
+  });
+
+  test('end cards rule also catches the cards\' "Hide" button, but never the player itself', () => {
+    const css = yhdxBuildHideCss({ hideEndCards: true });
+    // YouTube marks the player with "ytp-ce-shown" while cards are up: the rule must only target descendants.
+    assert.match(css, /^#movie_player \[class\*="ytp-ce-"\]/);
+    assert.doesNotMatch(css, /(^|,\s*)\[class\*="ytp-ce-"\]/);
   });
 
   test('never hides the autoplay countdown (so autoplay can still be canceled)', () => {
@@ -381,17 +388,17 @@ describe('hiding end cards and the end screen', () => {
   test('page stylesheet = caption style + hiding rules', () => {
     const css = yhdxBuildPageCss(YHDX_DEFAULTS);
     assert.match(css, /color: #ffea00/);
-    assert.match(css, /ytp-ce-element/);
+    assert.match(css, /ytp-ce-/);
     const noCaptionStyle = yhdxBuildPageCss({ ...YHDX_DEFAULTS, captionStyle: { ...YHDX_DEFAULTS.captionStyle, enabled: false } });
     assert.doesNotMatch(noCaptionStyle, /ytp-caption-segment/);
-    assert.match(noCaptionStyle, /ytp-ce-element/);
+    assert.match(noCaptionStyle, /ytp-ce-/);
   });
 
   test('the page receives the combined stylesheet', async () => {
     const posted = await runBridge();
     assert.equal(posted[0].__yhdx, 'settings');
     assert.match(posted[0].captionCss, /ytp-caption-segment/);
-    assert.match(posted[0].captionCss, /ytp-ce-element/);
+    assert.match(posted[0].captionCss, /ytp-ce-/);
   });
 
   test('existing installs get the new switches on (saved settings predate them)', async () => {
@@ -399,18 +406,18 @@ describe('hiding end cards and the end screen', () => {
     const posted = await runBridge(savedBefore);
     assert.equal(posted[0].settings.hideEndCards, true);
     assert.equal(posted[0].settings.hideComments, true);
-    assert.match(posted[0].captionCss, /ytp-ce-element/);
+    assert.match(posted[0].captionCss, /ytp-ce-/);
   });
 
   test('turning them off in settings stops hiding', async () => {
     const posted = await runBridge({ hideEndCards: false, hideEndScreen: false, hideComments: false });
-    assert.doesNotMatch(posted[0].captionCss, /ytp-ce-element|videowall|ytd-comments/);
+    assert.doesNotMatch(posted[0].captionCss, /ytp-ce-|videowall|ytd-comments/);
   });
 
   test('the injected stylesheet carries the hiding rules into the page', () => {
     const page = createYoutubePage();
     page.sendSettings(settings({ captions: 'leave', forceQuality: false }), yhdxBuildPageCss(YHDX_DEFAULTS));
-    assert.match(page.elements.get('yhdx-caption-style').textContent, /ytp-ce-element/);
+    assert.match(page.elements.get('yhdx-caption-style').textContent, /ytp-ce-/);
   });
 });
 
@@ -599,10 +606,13 @@ describe('extension split', () => {
   const player = readManifest('player');
   const downloader = readManifest('downloader');
 
-  test('player never gets cookies or native messaging', () => {
+  test('player never gets cookies or native messaging; only lyrics sites besides YouTube', () => {
     assert.deepEqual(player.permissions, ['storage']);
-    assert.equal(player.host_permissions, undefined);
     assert.equal(player.key, undefined);
+    for (const host of player.host_permissions) {
+      assert.match(host, /^https:\/\/(lrclib\.net|api\.opensubtitles\.com|\*\.opensubtitles\.(com|org))\/\*$/);
+    }
+    assert.ok(!player.host_permissions.some((h) => h.includes('youtube')));
   });
 
   test('player runs the 4K/caption scripts on YouTube', () => {
