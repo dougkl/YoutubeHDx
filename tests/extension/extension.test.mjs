@@ -198,6 +198,138 @@ describe('player: captions', () => {
   });
 });
 
+describe('player: caption repair (YouTube returns no caption data)', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout'] }));
+  afterEach(() => mock.timers.reset());
+
+  const CAPTIONS = 'https://www.youtube.com/api/timedtext?v=vid1&lang=en&name=&fmt=json3&pot=xyz';
+  const GOOD = JSON.stringify({ events: [{ tStartMs: 1200, segs: [{ utf8: 'I TOUCH MYSELF' }] }] });
+
+  /** Page where our extension already picked the human-made English track. */
+  function watching(over = {}) {
+    const page = createYoutubePage({ player: new FakePlayer({ tracks: [manualEn] }) });
+    page.sendSettings(settings({ forceQuality: false, ...over }));
+    advance(600);
+    page.player.calls.length = 0; // only count what the repair does
+    return page;
+  }
+  const reselects = (page) => page.player.calls.filter((c) => c[0] === 'setOption' && c[2] === 'track' && c[3]?.languageCode);
+
+  test('empty caption reply: reloads captions and re-selects the track (like toggling CC)', () => {
+    const page = watching();
+    page.captionXhr(CAPTIONS).finish(200, '');
+    advance(1000);
+    assert.equal(page.player.calls.length, 0); // waits a moment first
+    advance(1400);
+    assert.deepEqual(page.player.calls.map((c) => c[0]), ['unloadModule', 'loadModule', 'setOption']);
+    assert.deepEqual(plain(reselects(page)[0][3]), manualEn);
+  });
+
+  test('JSON reply with no caption events counts as empty', () => {
+    const page = watching();
+    page.captionXhr(CAPTIONS).finish(200, '{"wireMagic":"pb3","events":[]}');
+    advance(2500);
+    assert.equal(reselects(page).length, 1);
+  });
+
+  test('a good reply never triggers a repair', () => {
+    const page = watching();
+    page.captionXhr(CAPTIONS).finish(200, GOOD);
+    advance(30_000);
+    assert.equal(page.player.calls.length, 0);
+  });
+
+  test('a failure followed by a good reply is left alone', () => {
+    const page = watching();
+    page.captionXhr(CAPTIONS).finish(0, '');     // aborted
+    page.captionXhr(CAPTIONS).finish(200, GOOD); // player asked again by itself and got data
+    advance(30_000);
+    assert.equal(page.player.calls.length, 0);
+  });
+
+  test('a request that never finishes is treated as failed after 8 s', () => {
+    const page = watching();
+    page.captionXhr(CAPTIONS); // hangs
+    advance(7000);
+    assert.equal(page.player.calls.length, 0);
+    advance(1000 + 2200);
+    assert.equal(reselects(page).length, 1);
+  });
+
+  test('ignores auto-generated captions and captions for other videos (ads)', () => {
+    const page = watching();
+    page.captionXhr('https://www.youtube.com/api/timedtext?v=vid1&kind=asr&lang=en').finish(200, '');
+    page.captionXhr('https://www.youtube.com/api/timedtext?v=adVideo&lang=en').finish(200, '');
+    page.captionXhr('https://www.youtube.com/youtubei/v1/player').finish(200, '');
+    advance(30_000);
+    assert.equal(page.player.calls.length, 0);
+  });
+
+  test('keeps failing: two re-requests, then one reload at the same second, then stops', () => {
+    const page = watching();
+    const fail = () => page.captionXhr(CAPTIONS).finish(200, '');
+    fail(); advance(2500);          // repair 1
+    fail(); advance(4800);          // repair 2
+    fail(); advance(10_800);        // repair 3 = reload video
+    fail(); advance(30_000);        // no more
+    assert.equal(page.player.callsNamed('unloadModule').length, 2);
+    const reloads = page.player.callsNamed('loadVideoById');
+    assert.equal(reloads.length, 1);
+    assert.deepEqual(plain(reloads[0][1]), { videoId: 'vid1', startSeconds: 41.5 });
+  });
+
+  test('waits while an ad is showing', () => {
+    const page = watching();
+    page.player.ad = true;
+    page.captionXhr(CAPTIONS).finish(200, '');
+    advance(20_000);
+    assert.equal(reselects(page).length, 0);
+    page.player.ad = false;
+    advance(5000);
+    assert.equal(reselects(page).length, 1);
+  });
+
+  test('does nothing when captions are set to off', () => {
+    const page = watching({ captions: 'off' });
+    page.captionXhr(CAPTIONS).finish(200, '');
+    advance(30_000);
+    assert.equal(reselects(page).length, 0);
+    assert.equal(page.player.callsNamed('loadVideoById').length, 0);
+  });
+
+  test('never switches to auto-generated captions while repairing', () => {
+    const page = createYoutubePage({ player: new FakePlayer({ tracks: [autoEn] }) });
+    page.sendSettings(settings({ forceQuality: false, captions: 'leave' }));
+    page.player.currentTrack = autoEn; // YouTube itself chose auto captions
+    page.captionXhr(CAPTIONS).finish(200, '');
+    advance(30_000);
+    assert.equal(reselects(page).length, 0);
+  });
+
+  test('the request itself passes through untouched', () => {
+    const page = watching();
+    const x = page.captionXhr(CAPTIONS);
+    assert.equal(page.xhrLog.length, 1);
+    assert.equal(page.xhrLog[0], x);
+    assert.equal(x.method, 'GET');
+    assert.equal(x.url, CAPTIONS);
+  });
+
+  test('also watches fetch, and hands the reply back unchanged', async () => {
+    mock.timers.reset(); // real timers for the promise chain
+    const page = createYoutubePage({ player: new FakePlayer({ tracks: [manualEn] }) });
+    page.sendSettings(settings({ forceQuality: false }));
+    await new Promise((r) => setTimeout(r, 700));
+    page.player.calls.length = 0;
+
+    const res = await page.captionFetch(CAPTIONS, 200, '');
+    assert.equal(res.status, 200);
+    assert.equal(await res.text(), ''); // caller still gets the body
+    await new Promise((r) => setTimeout(r, 2400));
+    assert.equal(reselects(page).length, 1);
+  });
+});
+
 describe('player: caption style', () => {
   test('injects the style sheet and removes it when disabled', () => {
     const page = createYoutubePage();

@@ -33,6 +33,8 @@ export class FakePlayer {
     this.lazyTracks = lazyTracks;      // tracklist empty until loadModule('captions')
     this.captionsLoaded = !lazyTracks;
     this.ad = false;
+    this.time = 42;
+    this.currentTrack = null;
     this.calls = [];
     this.classList = { contains: (c) => c === 'ad-showing' && this.ad };
   }
@@ -42,9 +44,15 @@ export class FakePlayer {
   setPlaybackQuality(q) { this.calls.push(['setPlaybackQuality', q]); }
   getOption(module, option) {
     if (module === 'captions' && option === 'tracklist') return this.captionsLoaded ? this.tracks : [];
+    if (module === 'captions' && option === 'track') return this.currentTrack;
     return undefined;
   }
-  setOption(module, option, value) { this.calls.push(['setOption', module, option, value]); }
+  setOption(module, option, value) {
+    this.calls.push(['setOption', module, option, value]);
+    if (module === 'captions' && option === 'track') this.currentTrack = value?.languageCode ? value : null;
+  }
+  getCurrentTime() { return this.time; }
+  loadVideoById(arg) { this.calls.push(['loadVideoById', arg]); }
   loadModule(m) { this.calls.push(['loadModule', m]); if (m === 'captions') this.captionsLoaded = true; }
   unloadModule(m) { this.calls.push(['unloadModule', m]); }
   callsNamed(name) { return this.calls.filter((c) => c[0] === name); }
@@ -90,8 +98,42 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
     },
   };
 
-  const ctx = vm.createContext({ window, document, location: page.location, HTMLVideoElement, ...timerApi });
+  // Fake network layer the player uses for caption requests. content-main.js wraps these (read-only).
+  const xhrLog = [];
+  class FakeXHR {
+    constructor() { this.listeners = {}; this.responseType = ''; this.status = 0; this.responseText = ''; this.response = null; }
+    open(method, url) { this.method = method; this.url = url; }
+    send(body) { this.sentBody = body; xhrLog.push(this); }
+    addEventListener(type, fn) { (this.listeners[type] ??= []).push(fn); }
+    finish(status, body) {
+      this.status = status;
+      this.responseText = typeof body === 'string' ? body : '';
+      this.response = body;
+      for (const fn of this.listeners.loadend ?? []) fn();
+    }
+  }
+  let fetchReply = null;
+  const fakeFetch = async () => fetchReply();
+
+  const ctx = vm.createContext({
+    window, document, location: page.location, HTMLVideoElement, URL, ArrayBuffer, JSON,
+    XMLHttpRequest: FakeXHR, fetch: fakeFetch, ...timerApi,
+  });
   vm.runInContext(playerSource('content-main.js'), ctx);
+
+  page.xhrLog = xhrLog;
+  /** The player asking for captions over XHR; returns the request so the test can finish it. */
+  page.captionXhr = (url) => {
+    const x = new ctx.XMLHttpRequest();
+    x.open('GET', url);
+    x.send();
+    return x;
+  };
+  /** The player asking for captions over fetch. */
+  page.captionFetch = (url, status, body) => {
+    fetchReply = () => new Response(body, { status });
+    return ctx.fetch(url);
+  };
   return page;
 }
 

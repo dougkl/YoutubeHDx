@@ -53,6 +53,7 @@ Run the downloader on one PC only. The download history (`.youtubehdx-archive.tx
 - **Pause**: tray icon → *Pause downloads* (15 min, 1 h, 3 h, 8 h, or until you resume), or the pause buttons in the Downloader popup. The running download stops at once so your bandwidth is free; *Resume downloads* (or the end of the pause time) continues it from its partial file. A pause survives app restarts.
 - **Crash-safe**: unfinished jobs are saved to `queue.json` and come back when the app restarts (after a crash, sign-out or reboot). Finished videos are recorded in `.youtubehdx-archive.txt` on the NAS and never downloaded twice; half-done videos continue from their `.part` file in the temp folder.
 - **Auto-sync**: watched playlists are checked every `watchIntervalMinutes`. Already-downloaded videos are skipped via `.youtubehdx-archive.txt` on the NAS.
+- **Stuck captions fixed automatically**: YouTube sometimes answers the caption request with no data (its anti-bot token wasn't ready, e.g. during an ad), leaving CC "on" with nothing shown. The Player watches those replies (read-only) and, like toggling CC off/on, requests them again: up to two re-requests, then one reload of the video at the same second.
 - **Player** (playback PC): defaults to the highest resolution, human-made English captions only, and 14px yellow outlined captions with no background box. Click the YoutubeHDx Player icon to change quality, caption behaviour, caption language order, and font/size/colours (live preview).
 
 ## Output
