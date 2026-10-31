@@ -1,0 +1,34 @@
+:root {
+  --bg: #12151f; --panel: #1b2030; --text: #e9ebf2; --muted: #8a91a6;
+  --accent: #ff4d4d; --ok: #2fbf71; --warn: #f0a531; --err: #ff6b6b; --line: #2a3045;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; width: 360px; padding: 12px 14px 14px;
+  font: 13px/1.4 "Segoe UI", Roboto, Arial, sans-serif; color: var(--text); background: var(--bg);
+}
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+header strong { font-size: 15px; letter-spacing: .2px; }
+a { color: var(--muted); text-decoration: none; }
+a:hover { color: var(--text); }
+h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 0 6px; }
+button {
+  display: block; width: 100%; margin: 6px 0; padding: 9px 10px; border: 0; border-radius: 8px;
+  font: inherit; font-weight: 600; color: #fff; background: var(--accent); cursor: pointer;
+}
+button.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--line); font-weight: 500; }
+button:disabled { opacity: .55; cursor: default; }
+.muted { color: var(--muted); }
+.login { margin: 0 0 8px; padding: 6px 9px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); font-size: 12px; }
+.login.ok { color: var(--ok); } .login.err { color: var(--err); }
+#result { min-height: 1.4em; margin: 6px 0 0; }
+#result.ok { color: var(--ok); } #result.err { color: var(--err); }
+ul { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+li.job { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; margin-bottom: 6px; }
+li.job .title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+li.job .meta { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 2px; }
+li.job .bar { height: 3px; background: var(--line); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+li.job .bar > i { display: block; height: 100%; background: var(--accent); }
+.s-completed { color: var(--ok); } .s-failed { color: var(--err); } .s-completedWithErrors { color: var(--warn); }
+li.job .cancel { background: none; border: 0; padding: 0; margin: 0; width: auto; display: inline; color: var(--muted); font-weight: 400; font-size: 12px; }
+li.job .cancel:hover { color: var(--err); }

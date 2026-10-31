@@ -1,0 +1,17 @@
+bin/
+obj/
+publish/
+.vs/
+*.user
+*.suo
+dist/
+
+# Never commit personal data or credentials
+settings.json
+downloader-config.json
+*cookies*.txt
+*.log
+*.pfx
+*.pem
+*.key
+.env

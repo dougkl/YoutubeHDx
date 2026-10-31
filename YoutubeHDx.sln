@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{F973C695-F06F-438F-B747-6FF04D291ED0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoutubeHDx.Core", "src\YoutubeHDx.Core\YoutubeHDx.Core.csproj", "{C82BBB9D-AFED-484E-8A2D-EFC06A46491D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoutubeHDx.NativeHost", "src\YoutubeHDx.NativeHost\YoutubeHDx.NativeHost.csproj", "{81CB3954-FCEF-4EAC-B400-62E2DA70BC2D}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{A6AD3EDD-D202-44AD-A1A5-08EA96C9517C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "YoutubeHDx.Tests", "tests\YoutubeHDx.Tests\YoutubeHDx.Tests.csproj", "{C7AE37DB-A8CD-42FB-BA21-053640334D01}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C82BBB9D-AFED-484E-8A2D-EFC06A46491D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C82BBB9D-AFED-484E-8A2D-EFC06A46491D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C82BBB9D-AFED-484E-8A2D-EFC06A46491D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C82BBB9D-AFED-484E-8A2D-EFC06A46491D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81CB3954-FCEF-4EAC-B400-62E2DA70BC2D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81CB3954-FCEF-4EAC-B400-62E2DA70BC2D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81CB3954-FCEF-4EAC-B400-62E2DA70BC2D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81CB3954-FCEF-4EAC-B400-62E2DA70BC2D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C7AE37DB-A8CD-42FB-BA21-053640334D01}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C7AE37DB-A8CD-42FB-BA21-053640334D01}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C7AE37DB-A8CD-42FB-BA21-053640334D01}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C7AE37DB-A8CD-42FB-BA21-053640334D01}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{C82BBB9D-AFED-484E-8A2D-EFC06A46491D} = {F973C695-F06F-438F-B747-6FF04D291ED0}
+		{81CB3954-FCEF-4EAC-B400-62E2DA70BC2D} = {F973C695-F06F-438F-B747-6FF04D291ED0}
+		{C7AE37DB-A8CD-42FB-BA21-053640334D01} = {A6AD3EDD-D202-44AD-A1A5-08EA96C9517C}
+	EndGlobalSection
+EndGlobal

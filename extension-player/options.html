@@ -1,0 +1,87 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>YoutubeHDx Player settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main>
+    <h1>YoutubeHDx Player</h1>
+    <p class="muted">Applies to every video you watch on youtube.com in this browser.</p>
+
+    <section>
+      <h2>Playback quality</h2>
+      <label class="row"><input type="checkbox" id="forceQuality"> Always switch to my preferred quality</label>
+      <label class="field">Preferred quality
+        <select id="quality">
+          <option value="highres">Highest available (8K if offered)</option>
+          <option value="hd2160">4K (2160p)</option>
+          <option value="hd1440">1440p</option>
+          <option value="hd1080">1080p</option>
+          <option value="hd720">720p</option>
+        </select>
+      </label>
+      <p class="muted small">If a video doesn't go that high, the best quality below it is used.</p>
+    </section>
+
+    <section>
+      <h2>Captions</h2>
+      <label class="field">Behaviour
+        <select id="captions">
+          <option value="english">English, human-made only (never auto-generated)</option>
+          <option value="off">Always off</option>
+          <option value="leave">Leave YouTube's choice alone</option>
+        </select>
+      </label>
+      <label class="field">Language codes, in order of preference
+        <input type="text" id="captionLanguages" placeholder="en, en-US, en-GB">
+      </label>
+      <p class="muted small">If a video only has auto-generated English captions, captions stay off.</p>
+    </section>
+
+    <section>
+      <h2>Caption style</h2>
+      <label class="row"><input type="checkbox" id="styleEnabled"> Use my caption style</label>
+      <div class="grid">
+        <label class="field">Font
+          <input type="text" id="fontFamily">
+        </label>
+        <label class="field">Size (px)
+          <input type="number" id="fontSizePx" min="10" max="96">
+        </label>
+        <label class="field">Text colour
+          <input type="color" id="color">
+        </label>
+        <label class="field">Background colour
+          <input type="color" id="backgroundColor">
+        </label>
+        <label class="field">Background opacity <output id="opacityOut"></output>
+          <input type="range" id="backgroundOpacity" min="0" max="1" step="0.05">
+        </label>
+        <label class="field">Text edge
+          <select id="edge">
+            <option value="none">None</option>
+            <option value="drop-shadow">Drop shadow</option>
+            <option value="outline">Outline</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="preview">
+        <div class="ytp-caption-segment" id="preview">This is how your captions will look.</div>
+      </div>
+    </section>
+
+    <footer>
+      <button id="save">Save</button>
+      <button id="reset" class="secondary">Reset to defaults</button>
+      <span id="saved" role="status"></span>
+    </footer>
+  </main>
+
+  <style id="preview-style"></style>
+  <script src="defaults.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

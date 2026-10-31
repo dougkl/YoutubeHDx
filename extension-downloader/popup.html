@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>YoutubeHDx</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <strong>YoutubeHDx Downloader</strong>
+  </header>
+
+  <p id="login" class="login muted">Checking YouTube sign-in…</p>
+
+  <section id="actions">
+    <p id="hint" class="muted">Open a YouTube video or playlist.</p>
+    <button id="dl-video" hidden>Download this video in 4K</button>
+    <button id="dl-playlist" hidden>Download whole playlist</button>
+    <button id="watch-playlist" class="secondary" hidden>Auto-sync this playlist</button>
+    <p id="result" role="status"></p>
+  </section>
+
+  <section>
+    <h2>Downloads</h2>
+    <ul id="jobs"><li class="muted">Loading…</li></ul>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>
