@@ -6,6 +6,8 @@ function fill(s) {
   $('quality').value = s.quality;
   $('captions').value = s.captions;
   $('captionLanguages').value = (s.captionLanguages || []).join(', ');
+  $('hideEndCards').checked = s.hideEndCards;
+  $('hideEndScreen').checked = s.hideEndScreen;
   $('styleEnabled').checked = s.captionStyle.enabled;
   for (const f of STYLE_FIELDS) $(f).value = s.captionStyle[f];
   preview();
@@ -21,6 +23,8 @@ function read() {
     quality: $('quality').value,
     captions: $('captions').value,
     captionLanguages: $('captionLanguages').value.split(',').map((x) => x.trim()).filter(Boolean),
+    hideEndCards: $('hideEndCards').checked,
+    hideEndScreen: $('hideEndScreen').checked,
     captionStyle: style,
   };
 }

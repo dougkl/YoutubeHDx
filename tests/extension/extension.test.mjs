@@ -1,9 +1,9 @@
 // Run: node --test tests/extension/
 import { test, describe, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { FakePlayer, createYoutubePage, loadBackground, loadDefaults, readManifest } from './harness.mjs';
+import { FakePlayer, createYoutubePage, loadBackground, loadDefaults, readManifest, runBridge } from './harness.mjs';
 
-const { YHDX_DEFAULTS, yhdxBuildCaptionCss, yhdxHexToRgba } = loadDefaults();
+const { YHDX_DEFAULTS, yhdxBuildCaptionCss, yhdxHexToRgba, yhdxBuildHideCss, yhdxBuildPageCss } = loadDefaults();
 /** Advances the mock clock in small steps so chained setTimeout retries all run. */
 const advance = (ms) => { for (let t = 0; t < ms; t += 100) mock.timers.tick(100); };
 /** Objects made inside the vm sandbox have a foreign prototype; compare plain copies. */
@@ -347,6 +347,65 @@ describe('player: caption style', () => {
 });
 
 // ---------------------------------------------------------------- defaults.js
+
+describe('hiding end cards and the end screen', () => {
+  test('both are hidden by default', () => {
+    assert.equal(YHDX_DEFAULTS.hideEndCards, true);
+    assert.equal(YHDX_DEFAULTS.hideEndScreen, true);
+    const css = yhdxBuildHideCss(YHDX_DEFAULTS);
+    assert.match(css, /\.ytp-ce-element[^{]*\{ display: none !important; \}/);
+    assert.match(css, /\.ytp-cards-teaser/);
+    assert.match(css, /\.html5-endscreen\.videowall-endscreen[^{]*\{ display: none !important; \}/);
+  });
+
+  test('each switch is independent', () => {
+    const cardsOnly = yhdxBuildHideCss({ hideEndCards: true, hideEndScreen: false });
+    assert.match(cardsOnly, /ytp-ce-element/);
+    assert.doesNotMatch(cardsOnly, /endscreen/);
+    const wallOnly = yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: true });
+    assert.match(wallOnly, /videowall-endscreen/);
+    assert.doesNotMatch(wallOnly, /ytp-ce-element/);
+    assert.equal(yhdxBuildHideCss({ hideEndCards: false, hideEndScreen: false }), '');
+  });
+
+  test('never hides the autoplay countdown (so autoplay can still be canceled)', () => {
+    assert.doesNotMatch(yhdxBuildHideCss(YHDX_DEFAULTS), /autonav/);
+  });
+
+  test('page stylesheet = caption style + hiding rules', () => {
+    const css = yhdxBuildPageCss(YHDX_DEFAULTS);
+    assert.match(css, /color: #ffea00/);
+    assert.match(css, /ytp-ce-element/);
+    const noCaptionStyle = yhdxBuildPageCss({ ...YHDX_DEFAULTS, captionStyle: { ...YHDX_DEFAULTS.captionStyle, enabled: false } });
+    assert.doesNotMatch(noCaptionStyle, /ytp-caption-segment/);
+    assert.match(noCaptionStyle, /ytp-ce-element/);
+  });
+
+  test('the page receives the combined stylesheet', async () => {
+    const posted = await runBridge();
+    assert.equal(posted[0].__yhdx, 'settings');
+    assert.match(posted[0].captionCss, /ytp-caption-segment/);
+    assert.match(posted[0].captionCss, /ytp-ce-element/);
+  });
+
+  test('existing installs get the new switches on (saved settings predate them)', async () => {
+    const savedBefore = { quality: 'hd2160', captions: 'english' }; // no hideEnd* keys yet
+    const posted = await runBridge(savedBefore);
+    assert.equal(posted[0].settings.hideEndCards, true);
+    assert.match(posted[0].captionCss, /ytp-ce-element/);
+  });
+
+  test('turning them off in settings stops hiding', async () => {
+    const posted = await runBridge({ hideEndCards: false, hideEndScreen: false });
+    assert.doesNotMatch(posted[0].captionCss, /ytp-ce-element|videowall/);
+  });
+
+  test('the injected stylesheet carries the hiding rules into the page', () => {
+    const page = createYoutubePage();
+    page.sendSettings(settings({ captions: 'leave', forceQuality: false }), yhdxBuildPageCss(YHDX_DEFAULTS));
+    assert.match(page.elements.get('yhdx-caption-style').textContent, /ytp-ce-element/);
+  });
+});
 
 describe('caption CSS builder', () => {
   test('defaults are Doug\'s style: 14px yellow, outlined, no background box', () => {

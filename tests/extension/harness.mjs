@@ -19,7 +19,7 @@ const timerApi = {
 /** defaults.js as a module-like object. */
 export function loadDefaults() {
   const ctx = vm.createContext({});
-  vm.runInContext(playerSource('defaults.js') + '\n;globalThis.__x = { YHDX_DEFAULTS, yhdxBuildCaptionCss, yhdxHexToRgba };', ctx);
+  vm.runInContext(playerSource('defaults.js') + '\n;globalThis.__x = { YHDX_DEFAULTS, yhdxBuildCaptionCss, yhdxHexToRgba, yhdxBuildHideCss, yhdxBuildPageCss };', ctx);
   return ctx.__x;
 }
 
@@ -135,6 +135,22 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
     return ctx.fetch(url);
   };
   return page;
+}
+
+/** Runs defaults.js + content-bridge.js (isolated world) with the given saved settings; returns what it posts. */
+export async function runBridge(saved = {}) {
+  const posted = [];
+  const window = { addEventListener: () => {}, postMessage: (data) => posted.push(data) };
+  const chrome = {
+    storage: {
+      sync: { get: async (defaults) => ({ ...structuredClone(defaults), ...saved }) },
+      onChanged: { addListener: () => {} },
+    },
+  };
+  const ctx = vm.createContext({ window, chrome, location: { origin: 'https://www.youtube.com' }, structuredClone });
+  vm.runInContext(playerSource('defaults.js') + '\n' + playerSource('content-bridge.js'), ctx);
+  await new Promise((r) => setImmediate(r));
+  return posted;
 }
 
 // ---------------- fake chrome.* (for background.js) ----------------

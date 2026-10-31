@@ -5,7 +5,7 @@
   async function push() {
     const settings = await chrome.storage.sync.get(YHDX_DEFAULTS);
     window.postMessage(
-      { __yhdx: 'settings', settings, captionCss: yhdxBuildCaptionCss(settings.captionStyle) },
+      { __yhdx: 'settings', settings, captionCss: yhdxBuildPageCss(settings) },
       location.origin
     );
   }

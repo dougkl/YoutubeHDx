@@ -6,6 +6,8 @@ const YHDX_DEFAULTS = {
   quality: 'highres',           // highres (best the video has) | hd2160 | hd1440 | hd1080 | hd720
   captions: 'english',          // english (human-made only) | off | leave
   captionLanguages: ['en', 'en-US', 'en-GB'],
+  hideEndCards: true,           // video/channel/playlist boxes over the last seconds + "i" info-card teasers
+  hideEndScreen: true,          // suggestions wall when a video ends (autoplay countdown stays, so it can be canceled)
   captionStyle: {
     enabled: true,
     fontFamily: '"Segoe UI", Roboto, Arial, sans-serif',
@@ -50,4 +52,21 @@ function yhdxBuildCaptionCss(style) {
   background: ${yhdxHexToRgba(style.backgroundColor, style.backgroundOpacity)} !important;
   text-shadow: ${shadow} !important;
 }`;
+}
+
+/** CSS that hides YouTube's end cards and end-screen wall. Empty string = hide nothing. */
+function yhdxBuildHideCss(settings) {
+  const rules = [];
+  if (settings?.hideEndCards) {
+    rules.push('.ytp-ce-element, .ytp-cards-teaser, .ytp-cards-button { display: none !important; }');
+  }
+  if (settings?.hideEndScreen) {
+    rules.push('.html5-endscreen.videowall-endscreen, .ytp-endscreen-content { display: none !important; }');
+  }
+  return rules.join('\n');
+}
+
+/** Everything the Player injects into YouTube pages, as one stylesheet. */
+function yhdxBuildPageCss(settings) {
+  return [yhdxBuildCaptionCss(settings?.captionStyle), yhdxBuildHideCss(settings)].filter(Boolean).join('\n');
 }
