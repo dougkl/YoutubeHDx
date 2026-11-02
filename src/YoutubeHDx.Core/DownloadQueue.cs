@@ -27,7 +27,7 @@ public sealed class DownloadQueue : IAsyncDisposable
     public DownloadQueue(Action<string> log)
     {
         _log = log;
-        _runner = new YtDlpRunner(log);
+        _runner = new YtDlpRunner(log, f => FileSaved?.Invoke(f));
         _pause = PauseStore.Load();
         if (_pause.IsPaused) _log($"Starting paused: {_pause.Describe()}");
         RestoreQueue();
@@ -35,6 +35,12 @@ public sealed class DownloadQueue : IAsyncDisposable
 
     /// <summary>Raised on a worker thread when a job reaches a final state.</summary>
     public event Action<DownloadJob>? JobFinished;
+
+    /// <summary>Raised (on a worker thread) for every video file saved to the NAS.</summary>
+    public event Action<string>? FileSaved;
+
+    /// <summary>When set, unavailable videos a job runs into are written to the CSV after the job.</summary>
+    public UnavailableReporter? Reporter { get; set; }
 
     /// <summary>Raised whenever downloads are paused or resume (including when a timed pause runs out).</summary>
     public event Action<PauseState>? PauseChanged;
@@ -271,6 +277,11 @@ public sealed class DownloadQueue : IAsyncDisposable
             {
                 var settings = SettingsStore.Load(); // re-read each job so edits apply without restart
                 var exitCode = await _runner.RunAsync(job, settings, cts.Token).ConfigureAwait(false);
+                if (Reporter is { } reporter && job.Unavailable.Count > 0)
+                {
+                    try { await reporter.ReportAsync(job, cts.Token).ConfigureAwait(false); }
+                    catch (Exception ex) when (ex is not OperationCanceledException) { _log($"Unavailable-videos CSV: {ex.Message}"); }
+                }
                 job.MarkFinished(exitCode == 0 ? JobStatus.Completed
                     : job.ItemsCompleted > 0 ? JobStatus.CompletedWithErrors
                     : JobStatus.Failed);

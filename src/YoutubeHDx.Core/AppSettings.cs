@@ -48,6 +48,18 @@ public sealed class AppSettings
 
     public int WatchIntervalMinutes { get; set; } = 360;
 
+    /// <summary>Check downloaded videos for missing/bad English subtitles and add song lyrics where possible.</summary>
+    public bool SubtitleScan { get; set; } = true;
+
+    /// <summary>Hours between automatic full subtitle scans (new downloads are checked right away).</summary>
+    public int SubtitleScanIntervalHours { get; set; } = 24;
+
+    /// <summary>Optional OpenSubtitles API key, used when LRCLIB has no matching lyrics.</summary>
+    public string OpenSubtitlesApiKey { get; set; } = "";
+
+    /// <summary>Write unavailable videos (removed, private, blocked...) to a CSV in the download folder.</summary>
+    public bool ReportUnavailable { get; set; } = true;
+
     [JsonIgnore]
     public string ArchiveFile => Path.Combine(NasPath, ".youtubehdx-archive.txt");
 }

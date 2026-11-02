@@ -1,6 +1,9 @@
 YoutubeHDx install pack
 =======================
 
+Easiest: in the folder above this one, double-click Install-Latest-Player.cmd (playback PC) or
+Install-Latest-Downloader.cmd (download server). They always install the newest pack.
+
 Two parts, one per PC. Each installs for the Windows user who runs it; no admin needed
 (Windows may ask permission once while winget installs .NET or Chrome).
 
@@ -24,6 +27,11 @@ Then, in Chrome on the server (one time):
 Need your bandwidth? Tray icon -> Pause downloads (15 min ... until you resume), or the
 pause buttons in the Downloader popup. Resume picks up exactly where it stopped, and
 unfinished downloads also continue after a crash or reboot.
+
+Subtitles: after each download, daily, and on demand (tray -> Subtitles -> Scan subtitles now),
+videos with missing or bad English subtitles get the song's synced lyrics as an extra .srt next to
+them. Wrong ones? Tray -> Subtitles -> Mark subtitles as bad... and the next scan tries another source.
+Videos that are removed/private/blocked are listed in unavailable-videos.csv in the download folder.
 
 The server must stay logged in to Windows (the app lives in the tray).
 Settings: tray icon -> Edit settings...   Log: tray icon -> Open log.

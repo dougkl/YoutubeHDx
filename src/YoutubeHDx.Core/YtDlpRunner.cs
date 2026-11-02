@@ -9,8 +9,13 @@ namespace YoutubeHDx.Core;
 public sealed class YtDlpRunner
 {
     private readonly Action<string> _log;
+    private readonly Action<string>? _fileSaved;
 
-    public YtDlpRunner(Action<string> log) => _log = log;
+    public YtDlpRunner(Action<string> log, Action<string>? fileSaved = null)
+    {
+        _log = log;
+        _fileSaved = fileSaved;
+    }
 
     public async Task<int> RunAsync(DownloadJob job, AppSettings s, CancellationToken ct)
     {
@@ -41,7 +46,9 @@ public sealed class YtDlpRunner
         {
             if (e.Data is null) return;
             _log($"[yt-dlp] {e.Data}");
-            if (e.Data.StartsWith("ERROR:", StringComparison.Ordinal)) job.SetError(e.Data);
+            if (!e.Data.StartsWith("ERROR:", StringComparison.Ordinal)) return;
+            job.SetError(e.Data);
+            if (UnavailableVideos.Parse(e.Data) is { } gone) job.AddUnavailable(gone);
         };
 
         _log($"Starting job {job.Id}: {job.Url}");
@@ -96,6 +103,7 @@ public sealed class YtDlpRunner
             var file = line[YtDlpArgs.DoneMarker.Length..];
             job.ItemCompleted(file);
             _log($"Saved: {file}");
+            try { _fileSaved?.Invoke(file); } catch (Exception ex) { _log($"FileSaved handler threw: {ex.Message}"); }
             return;
         }
 

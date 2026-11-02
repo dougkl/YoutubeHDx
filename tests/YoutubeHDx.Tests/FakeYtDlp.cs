@@ -39,6 +39,22 @@ internal static class FakeYtDlp
                 Console.Error.WriteLine("ERROR: [youtube] vid9: Sign in to confirm your age");
                 return 1;
 
+            case "playlist-unavailable":
+                if (args.Contains("--flat-playlist"))
+                {
+                    // flat listing used for CSV titles: id, title, channel, playlist
+                    Out("gone0000001\tSong, With Comma\tSome Band\tMy MTV");
+                    Out("gone0000002\t[Deleted video]\tNA\tMy MTV");
+                    Out("okvideo0001\tGood Song\tGood Band\tMy MTV");
+                    return 0;
+                }
+                Out("[HDXSTART]okvideo0001|Good Song");
+                Out($"[HDXDONE]{Path.Combine(nas, "PL", "Good Song [okvideo0001].mkv")}");
+                Console.Error.WriteLine("ERROR: [youtube] gone0000001: Video unavailable. This video contains content from SME, who has blocked it in your country on copyright grounds");
+                Console.Error.WriteLine("ERROR: [youtube] gone0000002: Video unavailable. This video has been removed by the uploader");
+                Console.Error.WriteLine("ERROR: [youtube] gone0000003: Sign in to confirm you're not a bot");
+                return 1;
+
             case "slow-then-ok":
                 // First run: hangs like a long download (so a pause can interrupt it). Later runs: succeed.
                 var marker = (Environment.GetEnvironmentVariable(ArgsFileVariable) ?? "args.txt") + ".ran";

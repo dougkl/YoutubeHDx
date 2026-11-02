@@ -64,7 +64,7 @@ internal static class TestEnv
     /// <summary>Clears saved pause and queue state so every test starts from a clean, unpaused, empty queue.</summary>
     public static void ResetAppState()
     {
-        foreach (var f in new[] { AppPaths.PauseFile, AppPaths.QueueFile })
+        foreach (var f in new[] { AppPaths.PauseFile, AppPaths.QueueFile, AppPaths.SubtitleStateFile, AppPaths.UnavailableStateFile })
             if (File.Exists(f)) File.Delete(f);
     }
 

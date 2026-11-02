@@ -43,6 +43,8 @@ This creates `dist\YoutubeHDx-Pack-<version>.zip`. Add `-PublishTo '\\nas\media\
 
 The `.cmd` launchers work even when PowerShell scripts are restricted (e.g. `AllSigned`). Re-running an installer from a newer pack updates in place and keeps settings, login and history. `Uninstall-*.cmd` removes everything except the downloaded videos (and, unless `-RemoveData`, your settings).
 
+When published with `-PublishTo`, the NAS folder also gets `Install-Latest-Player.cmd` and `Install-Latest-Downloader.cmd`: double-click on a PC to install or update from the newest pack there.
+
 Run the downloader on one PC only. The download history (`.youtubehdx-archive.txt`) lives on the NAS, so a new server skips what's already downloaded.
 
 ## Using it
@@ -51,6 +53,9 @@ Run the downloader on one PC only. The download history (`.youtubehdx-archive.tx
 - **Right-click** any YouTube link or video page → *Download in 4K to NAS*.
 - **Tray app**: paste URLs, cancel jobs, sync watched playlists now, open the NAS folder or the log.
 - **Pause**: tray icon → *Pause downloads* (15 min, 1 h, 3 h, 8 h, or until you resume), or the pause buttons in the Downloader popup. The running download stops at once so your bandwidth is free; *Resume downloads* (or the end of the pause time) continues it from its partial file. A pause survives app restarts.
+- **Subtitle scan**: checks downloaded videos for missing or bad English subtitles (empty, almost empty, running past the end of the video, or covering only its start) and adds a sidecar `Title [id].en.srt` with the song's synced lyrics, from LRCLIB (then OpenSubtitles if `openSubtitlesApiKey` is set), used only when the song's length is within 3 s of the video. Runs after each download, once a day (`subtitleScanIntervalHours`), and from tray → *Subtitles → Scan subtitles now*. Never edits or deletes files: if a sidecar name is taken, it uses `.en.lyrics.srt`, `.en.lyrics2.srt`, ... Results are remembered, so unchanged files are skipped; no lyrics found is retried after 7 days (1 hour if the site was down). Stops while downloads are paused.
+- **Bad subtitles list**: tray → *Subtitles → Mark subtitles as bad…* (paste a YouTube link or the file name), or add lines to `.youtubehdx-badsubs.txt` in the download folder. The next scan adds subtitles from another source; listing the same video again means "still wrong, try another".
+- **Unavailable videos**: videos a sync can't get because they're removed, private, blocked in your country, copyright-blocked, members-only or age-restricted go to `unavailable-videos.csv` in the download folder (date, id, link, title, channel, playlist, reason), each once, so you can look for them elsewhere. Temporary errors aren't listed. Tray → *Open unavailable-videos list*.
 - **Crash-safe**: unfinished jobs are saved to `queue.json` and come back when the app restarts (after a crash, sign-out or reboot). Finished videos are recorded in `.youtubehdx-archive.txt` on the NAS and never downloaded twice; half-done videos continue from their `.part` file in the temp folder.
 - **Auto-sync**: watched playlists are checked every `watchIntervalMinutes`. Already-downloaded videos are skipped via `.youtubehdx-archive.txt` on the NAS.
 - **Stuck captions fixed automatically**: YouTube sometimes answers the caption request with no data (its anti-bot token wasn't ready, e.g. during an ad), leaving CC "on" with nothing shown. The Player watches those replies (read-only) and, like toggling CC off/on, requests them again: up to two re-requests, then one reload of the video at the same second.
@@ -85,6 +90,9 @@ Run the downloader on one PC only. The download history (`.youtubehdx-archive.tx
 | `outputTemplate` | see above | yt-dlp output template, relative to `nasPath` |
 | `extraArgs` | `""` | Raw yt-dlp args, e.g. PO token provider `--extractor-args` |
 | `maxConcurrentDownloads` | `1` | 1–4; read at app start |
+| `subtitleScan` / `subtitleScanIntervalHours` | `true` / `24` | Subtitle scan on/off and how often the full scan runs |
+| `openSubtitlesApiKey` | `""` | Optional fallback source for the subtitle scan |
+| `reportUnavailable` | `true` | Write `unavailable-videos.csv` |
 | `requireLogin` | `true` | Refuse to download without your YouTube login, so nothing runs anonymously |
 | `watchedPlaylists` | `[]` | `{ "url": "...", "name": "...", "enabled": true }` |
 | `watchIntervalMinutes` | `360` | Minimum 15 |

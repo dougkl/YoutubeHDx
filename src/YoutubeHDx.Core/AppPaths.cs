@@ -25,6 +25,12 @@ public static class AppPaths
     /// <summary>Jobs not finished yet, so they survive a crash or restart.</summary>
     public static string QueueFile => Path.Combine(DataDir, "queue.json");
 
+    /// <summary>What the subtitle scan found per video, so unchanged files aren't checked again.</summary>
+    public static string SubtitleStateFile => Path.Combine(DataDir, "subtitle-scan.json");
+
+    /// <summary>Videos already written to the unavailable-videos CSV (so each is listed once).</summary>
+    public static string UnavailableStateFile => Path.Combine(DataDir, "unavailable-reported.json");
+
     /// <summary>
     /// Per-user pipe name; the pipe is also created with CurrentUserOnly. When the data folder is overridden
     /// (tests), the name includes a hash of that folder so it can never reach the real running app.

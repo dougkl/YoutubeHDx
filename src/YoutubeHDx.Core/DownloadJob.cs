@@ -86,6 +86,13 @@ public sealed class DownloadJob
         lock (_gate) { ItemsCompleted++; LastFile = file; }
     }
 
+    private readonly List<UnavailableVideo> _unavailable = new();
+
+    /// <summary>Videos this job couldn't get because they're removed, private, blocked... (for the CSV).</summary>
+    public IReadOnlyList<UnavailableVideo> Unavailable { get { lock (_gate) return _unavailable.ToList(); } }
+
+    internal void AddUnavailable(UnavailableVideo v) { lock (_gate) _unavailable.Add(v); }
+
     internal void SetError(string error)
     {
         lock (_gate) Error = error;

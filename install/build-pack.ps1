@@ -95,6 +95,12 @@ if ($PublishTo) {
 
     Copy-Item -LiteralPath $pack -Destination $target -Recurse
     Copy-Item -LiteralPath $zip -Destination $PublishTo
+
+    # "Install latest" shortcuts: they always pick the newest pack, so they're written once and never replaced.
+    foreach ($cmd in Get-ChildItem (Join-Path $PSScriptRoot 'latest') -Filter 'Install-Latest-*.cmd') {
+        $dest = Join-Path $PublishTo $cmd.Name
+        if (-not (Test-Path -LiteralPath $dest)) { Copy-Item -LiteralPath $cmd.FullName -Destination $dest; Write-Host "Created $dest" }
+    }
     Write-Host "Published:   $target" -ForegroundColor Green
     Write-Host "             $(Join-Path $PublishTo (Split-Path $zip -Leaf))" -ForegroundColor Green
 }

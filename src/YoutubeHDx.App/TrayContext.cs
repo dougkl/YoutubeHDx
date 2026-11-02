@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using YoutubeHDx.Core;
+using YoutubeHDx.Core.Lyrics;
+using YoutubeHDx.Core.Subtitles;
 
 namespace YoutubeHDx.App;
 
@@ -15,6 +17,9 @@ internal sealed class TrayContext : ApplicationContext
     private ToolStripMenuItem _pauseMenu = null!;
     private ToolStripMenuItem _resumeItem = null!;
     private readonly System.Windows.Forms.Timer _pauseTicker = new() { Interval = 15_000 };
+    private readonly SubtitleScanner _scanner;
+    private readonly CancellationTokenSource _stop = new();
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public TrayContext()
     {
@@ -33,6 +38,17 @@ internal sealed class TrayContext : ApplicationContext
 
         _queue = new DownloadQueue(FileLog.Write);
         _queue.JobFinished += job => _ui.Post(_ => OnJobFinished(job), null);
+        _queue.Reporter = new UnavailableReporter(SettingsStore.Load, null, FileLog.Write);
+
+        // Subtitle scan: new downloads right away, the whole library daily, and on demand from the tray.
+        _scanner = new SubtitleScanner(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load),
+            s => new LyricsFinder(Http, s.OpenSubtitlesApiKey), () => _queue.PauseState.IsPaused, FileLog.Write);
+        _queue.FileSaved += path =>
+        {
+            if (SettingsStore.Load().SubtitleScan) _ = SafeBackground(() => _scanner.ScanFileAsync(path, _stop.Token));
+        };
+        _ = DailySubtitleScanAsync();
+
         _queue.Start(settings.MaxConcurrentDownloads);
 
         _ipc = new IpcServer(HandleIpc, FileLog.Write);
@@ -83,6 +99,16 @@ internal sealed class TrayContext : ApplicationContext
         menu.Items.Add(_resumeItem);
 
         menu.Items.Add(new ToolStripSeparator());
+        var subs = new ToolStripMenuItem("Subtitles");
+        subs.DropDownItems.Add("Scan subtitles now", null, (_, _) => ScanNow());
+        subs.DropDownItems.Add("Mark subtitles as bad…", null, (_, _) => MarkBad());
+        subs.DropDownItems.Add("Open bad-subtitles list", null, (_, _) =>
+            SafeRun(() => OpenIfExists(BadSubsList.PathIn(SettingsStore.Load().NasPath), "No videos marked yet.")));
+        menu.Items.Add(subs);
+        menu.Items.Add("Open unavailable-videos list", null, (_, _) =>
+            SafeRun(() => OpenIfExists(Path.Combine(SettingsStore.Load().NasPath, UnavailableReporter.CsvName), "No unavailable videos so far.")));
+
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Open NAS folder", null, (_, _) => SafeRun(() => Open(SettingsStore.Load().NasPath)));
         menu.Items.Add("Edit settings…", null, (_, _) => SafeRun(() => { SettingsStore.Load(); Open(AppPaths.SettingsFile); }));
         menu.Items.Add("Open log", null, (_, _) => SafeRun(() => Open(AppPaths.LogFile)));
@@ -92,6 +118,65 @@ internal sealed class TrayContext : ApplicationContext
     }
 
     internal DownloadQueue Queue => _queue;
+
+    // ---------------------------------------------------------------- subtitles
+
+    private void ScanNow()
+    {
+        _tray.ShowBalloonTip(3000, "YoutubeHDx", "Checking subtitles of downloaded videos…", ToolTipIcon.Info);
+        _ = SafeBackground(async () =>
+        {
+            var summary = await _scanner.ScanAllAsync(_stop.Token);
+            _ui.Post(_ => _tray.ShowBalloonTip(6000, "Subtitle scan finished", summary.Describe(), ToolTipIcon.Info), null);
+        });
+    }
+
+    private void MarkBad()
+    {
+        var text = Prompt.Ask("Mark subtitles as bad",
+            "Paste the YouTube link (or the video's file name). The scan will add better subtitles;\n" +
+            "if those are wrong too, mark it again and it tries another source.");
+        if (string.IsNullOrWhiteSpace(text)) return;
+        var id = SafeRun(() => BadSubsList.Add(SettingsStore.Load().NasPath, text));
+        if (id is null) { MessageBox.Show("That doesn't look like a YouTube link or video file name.", "YoutubeHDx"); return; }
+        ScanNow();
+    }
+
+    private async Task DailySubtitleScanAsync()
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMinutes(30), _stop.Token); // let downloads start first after logon
+            while (!_stop.IsCancellationRequested)
+            {
+                var next = TimeSpan.FromHours(Math.Max(1, SettingsStore.Load().SubtitleScanIntervalHours));
+                if (SettingsStore.Load().SubtitleScan)
+                {
+                    try
+                    {
+                        var summary = await _scanner.ScanAllAsync(_stop.Token);
+                        if (summary.Stopped) next = TimeSpan.FromHours(1); // paused: try again soon
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException) { FileLog.Write($"Subtitle scan failed: {ex.Message}"); }
+                }
+                await Task.Delay(next, _stop.Token);
+            }
+        }
+        catch (OperationCanceledException) { /* exiting */ }
+    }
+
+    private static async Task SafeBackground(Func<Task> work)
+    {
+        try { await Task.Run(work); }
+        catch (OperationCanceledException) { /* exiting */ }
+        catch (Exception ex) { FileLog.Write($"Background task failed: {ex}"); }
+    }
+
+    private static void OpenIfExists(string path, string emptyMessage)
+    {
+        if (File.Exists(path)) Open(path);
+        else MessageBox.Show(emptyMessage, "YoutubeHDx");
+    }
 
     /// <summary>Pause lengths offered in the tray and the extension. null = until resumed.</summary>
     internal static readonly (string Label, int? Minutes)[] PauseChoices =
@@ -205,6 +290,7 @@ internal sealed class TrayContext : ApplicationContext
     protected override void ExitThreadCore()
     {
         FileLog.Write($"YoutubeHDx app stopping: {_exitReason}");
+        _stop.Cancel();
         _pauseTicker.Stop();
         _tray.Visible = false;
         _tray.Dispose();
