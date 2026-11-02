@@ -115,6 +115,10 @@ public static partial class SongKey
             return new(SongMatch.Different, $"same name, but {lengthText}");
         }
 
+        // The very same name and length ("What Is Life (2014 Remaster)" in two folders), whatever artist the tags suggest.
+        if (sameLength && a.Kind == b.Kind && Norm(a.Raw) is { Length: >= 4 } na && na == Norm(b.Raw))
+            return new(SongMatch.Same, "same name and length");
+
         // One file has no artist in its name ("barracuda.mkv").
         var oneNameless = (a.Artist.Length == 0) != (b.Artist.Length == 0);
         if (oneNameless && sameLength)

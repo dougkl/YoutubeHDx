@@ -44,11 +44,17 @@ internal sealed class DuplicatesPanel
         move.Click += async (_, _) => await MoveSelected();
         var open = new Button { Text = "Open folder", AutoSize = true };
         open.Click += (_, _) => { if (Selected(_dups).FirstOrDefault() is { } d) ShowInExplorer(d.Path); };
+        var pickUnsafe = new Button { Text = "Select the ones that can't be hidden", AutoSize = true };
+        pickUnsafe.Click += (_, _) =>
+        {
+            foreach (ListViewItem i in _dups.Items) i.Selected = i.Tag is DuplicateEntry { State: "unsafe" };
+            _dups.Focus();
+        };
         var folders = new Button { Text = "Folders to check…", AutoSize = true };
         folders.Click += (_, _) => { using var f = new FoldersDialog(); if (f.ShowDialog(_owner) == DialogResult.OK) _ = Run(() => _finder.ScanAsync(_stop()), "Checking for duplicates…"); };
 
         var dupButtons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 40, Padding = new Padding(6) };
-        dupButtons.Controls.AddRange([_scan, unignore, reignore, move, open, folders]);
+        dupButtons.Controls.AddRange([_scan, unignore, reignore, move, pickUnsafe, open, folders]);
         DuplicatesTab.Controls.Add(_dups);
         DuplicatesTab.Controls.Add(_dupInfo);
         DuplicatesTab.Controls.Add(dupButtons);

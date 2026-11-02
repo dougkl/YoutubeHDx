@@ -119,6 +119,17 @@ internal static class DuplicateFinderTests
     }
 
     [Test]
+    public static async Task AtTheSameResolutionTheYoutubeHDxCopyWins()
+    {
+        var env = Make();
+        var old = Video(env, Path.Combine("AutoDownload", "MyMTV2", "Amy Macdonald - This is the Life.mkv"), 188, 2160, 10_500_000);
+        var ours = Video(env, Path.Combine("AutoDownload", "YoutubeHDx", "My MTV", "Amy Macdonald - This is the Life [iRYvuS9OxdA].mkv"), 188, 2160, 5_600_000);
+        var r = await env.Finder.ScanAsync(CancellationToken.None);
+        Assert.Equal(old, r.Duplicates.Single().Path);
+        Assert.Equal(ours, r.Duplicates.Single().KeptPath);
+    }
+
+    [Test]
     public static async Task UnignoreShowsItAgainForGood()
     {
         var env = Make();
@@ -239,5 +250,19 @@ internal static class DuplicateFinderTests
             PlexIgnore.PatternFor("Cinderella - Don't Know What You Got (Till It's Gone) [Official Video].mkv"));
         Assert.True(PlexIgnore.Matches("Song *A*.mkv", "song (a).MKV"));
         Assert.False(PlexIgnore.Matches("Song *A*.mkv", "Song (A).mp4"));
+    }
+}
+
+internal static class SongKeyMoreTests
+{
+    [Test]
+    public static void SameFileNameInTwoFoldersIsTheSameEvenIfOnlyOneHasAnArtistTag()
+    {
+        var a = SongKey.Parse("What Is Life (2014 Remaster)", "George Harrison - Topic");
+        var b = SongKey.Parse("What Is Life (2014 Remaster) (1)");
+        Assert.Equal(SongMatch.Same, SongKey.Compare(a, 264, b, 264).Match);
+        Assert.Equal(SongMatch.Same, SongKey.Compare(SongKey.Parse("DEVO ＂Whip It＂ [Official Music Video]"), 162,
+            SongKey.Parse("DEVO  Whip It  [Official Music Video]"), 162).Match);
+        Assert.Equal(SongMatch.Different, SongKey.Compare(SongKey.Parse("Hello"), 200, SongKey.Parse("Hello (Live)"), 200).Match);
     }
 }

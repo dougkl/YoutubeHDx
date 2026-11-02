@@ -230,10 +230,12 @@ public sealed partial class DuplicateFinder
         var hidden = new HashSet<int>();
         foreach (var group in Enumerable.Range(0, facts.Count).GroupBy(Find).Where(g => g.Count() > 1))
         {
+            // Highest resolution wins. At the same resolution the YoutubeHDx copy wins (it has the proper subtitles, .nfo and
+            // picture, and bitrates of different codecs can't be compared), then the higher bitrate, the bigger file, the newer one.
             var ranked = group.OrderByDescending(i => facts[i].Height)
+                .ThenByDescending(i => IsUnder(facts[i].Path, nasPath) ? 1 : 0)
                 .ThenByDescending(i => facts[i].BitRate)
                 .ThenByDescending(i => facts[i].Size)
-                .ThenByDescending(i => IsUnder(facts[i].Path, nasPath) ? 1 : 0)   // YoutubeHDx copy: has subtitles, .nfo, picture
                 .ThenByDescending(i => facts[i].ModifiedTicks)
                 .ToList();
             var best = ranked[0];
@@ -257,9 +259,8 @@ public sealed partial class DuplicateFinder
     // ---------------------------------------------------------------- .plexignore
 
     /// <summary>
-    /// Writes our block into each folder's .plexignore. A pattern is only used if it hides nothing but duplicates;
-    /// otherwise the entry is marked "unsafe" (move it instead). Patterns in a checked root folder apply to its whole
-    /// tree in Plex, so they're checked against every file under it.
+    /// Writes our block into each folder's .plexignore. A pattern is only used if it hides nothing but duplicates
+    /// (checked against every file in the folder and below it); otherwise the entry is marked "unsafe" (move it instead).
     /// </summary>
     private DuplicateResults ApplyIgnores(IReadOnlyList<string> roots, IReadOnlyList<string>? allFiles = null, bool write = true)
     {
@@ -278,10 +279,11 @@ public sealed partial class DuplicateFinder
             if (d.State == "shown") { updated.Add(d); continue; }
             var dir = Path.GetDirectoryName(d.Path)!;
             var pattern = PlexIgnore.PatternFor(Path.GetFileName(d.Path));
-            var isRoot = roots.Contains(dir, StringComparer.OrdinalIgnoreCase);
+            // In the top folder of a Plex library a pattern also matches in every subfolder, and we can't know which
+            // folders are library tops: check the whole tree below this folder to be safe.
             var literal = pattern.Split('*')[0];
             var clash = visibleByDir
-                .Where(kv => string.Equals(kv.Key, dir, StringComparison.OrdinalIgnoreCase) || (isRoot && IsUnder(kv.Key, dir)))
+                .Where(kv => string.Equals(kv.Key, dir, StringComparison.OrdinalIgnoreCase) || IsUnder(kv.Key, dir))
                 .SelectMany(kv => kv.Value)
                 .Any(name => name!.StartsWith(literal, StringComparison.OrdinalIgnoreCase) && PlexIgnore.Matches(pattern, name));
             if (clash) { updated.Add(d with { State = "unsafe" }); continue; }
