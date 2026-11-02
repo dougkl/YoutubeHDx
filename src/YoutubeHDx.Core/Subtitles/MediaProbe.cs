@@ -8,8 +8,18 @@ namespace YoutubeHDx.Core.Subtitles;
 
 public sealed record SubtitleStream(int Index, string? Language);
 
-/// <summary>What the scanner needs to know about a video file.</summary>
-public sealed record MediaInfo(double Duration, string? Title, string? Artist, IReadOnlyList<SubtitleStream> Subtitles);
+/// <summary>What the scanner needs to know about a video file. Tags = the file's metadata (yt-dlp --embed-metadata).</summary>
+public sealed record MediaInfo(double Duration, string? Title, string? Artist, IReadOnlyList<SubtitleStream> Subtitles,
+    IReadOnlyDictionary<string, string>? Tags = null)
+{
+    public string? Tag(params string[] names)
+    {
+        if (Tags is null) return null;
+        foreach (var n in names)
+            if (Tags.TryGetValue(n, out var v) && !string.IsNullOrWhiteSpace(v)) return v;
+        return null;
+    }
+}
 
 public interface IMediaProbe
 {
@@ -17,6 +27,9 @@ public interface IMediaProbe
 
     /// <summary>The Nth subtitle stream as SRT text (null if it can't be read).</summary>
     Task<string?> ExtractSubtitleAsync(string path, int subtitleIndex, CancellationToken ct);
+
+    /// <summary>One video frame as JPEG (used as a picture when YouTube no longer has the thumbnail).</summary>
+    Task<byte[]?> GrabFrameAsync(string path, double atSeconds, CancellationToken ct) => Task.FromResult<byte[]?>(null);
 }
 
 /// <summary>ffprobe/ffmpeg from the same place the downloader uses (settings.ffmpegLocation, else PATH).</summary>
@@ -72,7 +85,11 @@ public sealed class FfmpegProbe : IMediaProbe
                     }
                 }
             }
-            return new MediaInfo(duration, Tag("title"), Tag("artist", "uploader", "album_artist"), subs);
+            var all = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (format.ValueKind == JsonValueKind.Object && format.TryGetProperty("tags", out var allTags))
+                foreach (var t in allTags.EnumerateObject())
+                    if (t.Value.ValueKind == JsonValueKind.String) all[t.Name] = t.Value.GetString()!;
+            return new MediaInfo(duration, Tag("title"), Tag("artist", "uploader", "album_artist"), subs, all);
         }
         catch (JsonException)
         {
@@ -82,6 +99,31 @@ public sealed class FfmpegProbe : IMediaProbe
 
     public Task<string?> ExtractSubtitleAsync(string path, int subtitleIndex, CancellationToken ct) =>
         RunAsync(Tool("ffmpeg"), ct, "-v", "error", "-i", path, "-map", $"0:s:{subtitleIndex}", "-f", "srt", "-");
+
+    public async Task<byte[]?> GrabFrameAsync(string path, double atSeconds, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo(Tool("ffmpeg"))
+        {
+            UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+        };
+        foreach (var a in new[] { "-v", "error", "-ss", atSeconds.ToString("0.###", CultureInfo.InvariantCulture), "-i", path,
+                     "-map", "0:v:0", "-frames:v", "1", "-vf", "scale='min(1920,iw)':-2", "-q:v", "3", "-f", "image2pipe", "-c:v", "mjpeg", "-" })
+            psi.ArgumentList.Add(a);
+        try
+        {
+            using var p = Process.Start(psi)!;
+            using var ms = new MemoryStream();
+            var copy = p.StandardOutput.BaseStream.CopyToAsync(ms, ct);
+            _ = p.StandardError.ReadToEndAsync(ct);
+            await p.WaitForExitAsync(ct).ConfigureAwait(false);
+            await copy.ConfigureAwait(false);
+            return p.ExitCode == 0 && ms.Length > 1000 ? ms.ToArray() : null;
+        }
+        catch (Win32Exception)
+        {
+            return null;
+        }
+    }
 
     private static async Task<string?> RunAsync(string exe, CancellationToken ct, params string[] args)
     {

@@ -50,6 +50,9 @@ public static class YtDlpArgs
         if (s.EmbedSubtitles) a.Add("--embed-subs");
         if (!s.EmbedSubtitles || s.KeepSubtitleFiles) a.Add("--write-subs");
 
+        // Keep the thumbnail as "Name [id].jpg" too (it is also embedded): Plex/Jellyfin/Kodi use it as the picture.
+        if (s.WriteInfoFiles) a.Add("--write-thumbnail");
+
         if (!string.IsNullOrWhiteSpace(s.FfmpegLocation))
         {
             a.Add("--ffmpeg-location");

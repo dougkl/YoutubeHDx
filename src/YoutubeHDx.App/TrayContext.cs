@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using YoutubeHDx.Core;
+using YoutubeHDx.Core.Library;
 using YoutubeHDx.Core.Lyrics;
 using YoutubeHDx.Core.Subtitles;
 
@@ -18,6 +19,7 @@ internal sealed class TrayContext : ApplicationContext
     private ToolStripMenuItem _resumeItem = null!;
     private readonly System.Windows.Forms.Timer _pauseTicker = new() { Interval = 15_000 };
     private readonly SubtitleScanner _scanner;
+    private readonly InfoFileWriter _info;
     private readonly CancellationTokenSource _stop = new();
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -43,10 +45,14 @@ internal sealed class TrayContext : ApplicationContext
         // Subtitle scan: new downloads right away, the whole library daily, and on demand from the tray.
         _scanner = new SubtitleScanner(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load),
             s => new LyricsFinder(Http, s.OpenSubtitlesApiKey), () => _queue.PauseState.IsPaused, FileLog.Write);
-        _queue.FileSaved += path =>
+        _info = new InfoFileWriter(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), Http, FileLog.Write);
+        _queue.FileSaved += path => _ = SafeBackground(async () =>
         {
-            if (SettingsStore.Load().SubtitleScan) _ = SafeBackground(() => _scanner.ScanFileAsync(path, _stop.Token));
-        };
+            var s = SettingsStore.Load();
+            if (s.WriteInfoFiles) await _info.WriteForAsync(path, _stop.Token);
+            if (s.SubtitleScan) await _scanner.ScanFileAsync(path, _stop.Token);
+        });
+        _ = SafeBackground(() => TidyLibraryAsync(announce: false)); // drop old date prefixes, add missing .nfo/.jpg
         _ = DailySubtitleScanAsync();
 
         _queue.Start(settings.MaxConcurrentDownloads);
@@ -105,6 +111,12 @@ internal sealed class TrayContext : ApplicationContext
         subs.DropDownItems.Add("Open bad-subtitles list", null, (_, _) =>
             SafeRun(() => OpenIfExists(BadSubsList.PathIn(SettingsStore.Load().NasPath), "No videos marked yet.")));
         menu.Items.Add(subs);
+        var library = new ToolStripMenuItem("Library (Plex)");
+        library.DropDownItems.Add("Fix file names and add info files now", null,
+            (_, _) => _ = SafeBackground(() => TidyLibraryAsync(announce: true)));
+        library.DropDownItems.Add("Open renamed-files list", null, (_, _) =>
+            SafeRun(() => OpenIfExists(Path.Combine(SettingsStore.Load().NasPath, DatedNameFixer.CsvName), "No files renamed so far.")));
+        menu.Items.Add(library);
         menu.Items.Add("Open unavailable-videos list", null, (_, _) =>
             SafeRun(() => OpenIfExists(Path.Combine(SettingsStore.Load().NasPath, UnavailableReporter.CsvName), "No unavailable videos so far.")));
 
@@ -131,6 +143,32 @@ internal sealed class TrayContext : ApplicationContext
         });
     }
 
+    /// <summary>
+    /// Removes the date older versions put in front of file names (it confused Plex), then writes the .nfo/.jpg
+    /// files players use for artist, song and picture. Both only touch what still needs it, so this is cheap to repeat.
+    /// </summary>
+    private async Task TidyLibraryAsync(bool announce)
+    {
+        var s = SettingsStore.Load();
+        var parts = new List<string>();
+        if (s.FixDatedFileNames && !s.OutputTemplate.Contains("upload_date", StringComparison.Ordinal))
+        {
+            var renamed = await Task.Run(() => DatedNameFixer.Fix(s.NasPath, FileLog.Write, _stop.Token));
+            if (renamed.Renamed + renamed.Conflicts + renamed.Failed > 0) parts.Add(renamed.Describe());
+        }
+        if (s.WriteInfoFiles)
+        {
+            if (announce) _ui.Post(_ => _tray.ShowBalloonTip(3000, "YoutubeHDx", "Adding info files and pictures for Plex…", ToolTipIcon.Info), null);
+            var info = await _info.WriteAllAsync(_stop.Token);
+            if (info.Nfos + info.Pictures + info.Failed > 0) parts.Add(info.Describe());
+        }
+        if (announce || parts.Count > 0)
+        {
+            var text = parts.Count > 0 ? string.Join("; ", parts) : "Everything was already in order.";
+            _ui.Post(_ => _tray.ShowBalloonTip(6000, "Library tidied", text, ToolTipIcon.Info), null);
+        }
+    }
+
     private void MarkBad()
     {
         var text = Prompt.Ask("Mark subtitles as bad",
@@ -150,6 +188,8 @@ internal sealed class TrayContext : ApplicationContext
             while (!_stop.IsCancellationRequested)
             {
                 var next = TimeSpan.FromHours(Math.Max(1, SettingsStore.Load().SubtitleScanIntervalHours));
+                try { await TidyLibraryAsync(announce: false); }
+                catch (Exception ex) when (ex is not OperationCanceledException) { FileLog.Write($"Library tidy failed: {ex.Message}"); }
                 if (SettingsStore.Load().SubtitleScan)
                 {
                     try

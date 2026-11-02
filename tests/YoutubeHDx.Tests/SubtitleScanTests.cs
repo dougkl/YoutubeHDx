@@ -35,6 +35,15 @@ internal sealed class FakeProbe : IMediaProbe
 
     public Task<string?> ExtractSubtitleAsync(string path, int i, CancellationToken ct) =>
         Task.FromResult(Embedded.TryGetValue(Path.GetFileName(path), out var s) ? s : null);
+
+    public byte[]? Frame { get; set; }
+    public int FrameGrabs { get; private set; }
+
+    public Task<byte[]?> GrabFrameAsync(string path, double at, CancellationToken ct)
+    {
+        FrameGrabs++;
+        return Task.FromResult(Frame);
+    }
 }
 
 internal static class SongTitleTests

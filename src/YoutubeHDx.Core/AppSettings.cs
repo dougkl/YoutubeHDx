@@ -28,9 +28,16 @@ public sealed class AppSettings
     /// <summary>Also keep a sidecar .srt next to the .mkv (handy for Plex/Jellyfin).</summary>
     public bool KeepSubtitleFiles { get; set; } = true;
 
-    /// <summary>yt-dlp output template, relative to NasPath.</summary>
-    public string OutputTemplate { get; set; } =
-        "%(playlist_title|Singles)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s";
+    /// <summary>
+    /// yt-dlp output template, relative to NasPath. "Artist - Song [id].mkv": no date in front, so Plex reads
+    /// the artist and title from the name. The [id] stays: the subtitle scan uses it to know which video it is.
+    /// </summary>
+    public string OutputTemplate { get; set; } = DefaultOutputTemplate;
+
+    public const string DefaultOutputTemplate = "%(playlist_title|Singles)s/%(title)s [%(id)s].%(ext)s";
+
+    /// <summary>The template used up to 1.4.0, with the upload date in front. Saved settings using it are upgraded.</summary>
+    public const string DatedOutputTemplate = "%(playlist_title|Singles)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s";
 
     /// <summary>Extra raw yt-dlp arguments, e.g. a PO token provider's --extractor-args.</summary>
     public string ExtraArgs { get; set; } = "";
@@ -56,6 +63,15 @@ public sealed class AppSettings
 
     /// <summary>Optional OpenSubtitles API key, used when LRCLIB has no matching lyrics.</summary>
     public string OpenSubtitlesApiKey { get; set; } = "";
+
+    /// <summary>
+    /// Next to each video, write "Name [id].nfo" (artist, song, description, YouTube link) and "Name [id].jpg"
+    /// (the YouTube thumbnail) so Plex (NFO agent), Jellyfin, Emby and Kodi show proper details and pictures.
+    /// </summary>
+    public bool WriteInfoFiles { get; set; } = true;
+
+    /// <summary>Rename files saved by older versions ("2014-07-18 - Title [id].mkv") to drop the date (only while the template has no date).</summary>
+    public bool FixDatedFileNames { get; set; } = true;
 
     /// <summary>Write unavailable videos (removed, private, blocked...) to a CSV in the download folder.</summary>
     public bool ReportUnavailable { get; set; } = true;
@@ -89,8 +105,15 @@ public static class SettingsStore
 
             try
             {
-                return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile), Json.Options)
-                       ?? new AppSettings();
+                var loaded = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(AppPaths.SettingsFile), Json.Options)
+                             ?? new AppSettings();
+                if (loaded.OutputTemplate == AppSettings.DatedOutputTemplate)
+                {
+                    // Old default: the date in front of the name confused Plex. Only the untouched default is changed.
+                    loaded.OutputTemplate = AppSettings.DefaultOutputTemplate;
+                    SaveUnlocked(loaded);
+                }
+                return loaded;
             }
             catch (JsonException ex)
             {

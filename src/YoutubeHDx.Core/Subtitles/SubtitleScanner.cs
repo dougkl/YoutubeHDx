@@ -163,7 +163,9 @@ public sealed partial class SubtitleScanner
         var st = state.TryGetValue(id, out var existing) ? existing : null;
         var flagCount = flags.GetValueOrDefault(id);
         var newlyFlagged = flagCount > (st?.FlagsHandled ?? 0);
-        var sameFile = st is not null && st.Path == file && st.Size == info.Length && st.ModifiedTicks == info.LastWriteTimeUtc.Ticks;
+        var sameFile = st is not null && st.Size == info.Length && st.ModifiedTicks == info.LastWriteTimeUtc.Ticks &&
+                       (st.Path == file || !File.Exists(st.Path)); // renamed (e.g. date removed): same video, no recheck
+        if (sameFile && st!.Path != file) st.Path = file;
 
         if (sameFile && !newlyFlagged)
         {

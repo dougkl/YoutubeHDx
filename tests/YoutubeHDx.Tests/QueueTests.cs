@@ -40,7 +40,8 @@ internal static class QueueTests
         Assert.Contains("https://www.youtube.com/watch?v=vid1", args);
         // Characters a shell would mangle (<, >, |, %, *) must arrive intact.
         Assert.Contains("bv*[height<=2160]+ba/b[height<=2160]/bv*+ba/b", args);
-        Assert.Contains("%(upload_date>%Y-%m-%d)s", args);
+        Assert.Contains("%(playlist_title|Singles)s/%(title)s [%(id)s].%(ext)s", args); // no date in front (Plex)
+        Assert.False(args.Contains("upload_date"));
     }
 
     [Test]
