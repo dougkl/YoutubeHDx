@@ -15,3 +15,6 @@ downloader-config.json
 *.pem
 *.key
 .env
+
+# local transfer bundles and one-off tools
+.bundles/
