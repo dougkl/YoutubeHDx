@@ -463,7 +463,7 @@ internal static class UnavailableTests
         TestEnv.UseFakeYtDlp("ok");
         await using var queue = new DownloadQueue(_ => { });
         var saved = new List<string>();
-        queue.FileSaved += f => { lock (saved) saved.Add(f); };
+        queue.FileSaved += (f, _) => { lock (saved) saved.Add(f); };
         var done = new TaskCompletionSource<DownloadJob>(TaskCreationOptions.RunContinuationsAsynchronously);
         queue.JobFinished += j => done.TrySetResult(j);
         queue.Start(1);

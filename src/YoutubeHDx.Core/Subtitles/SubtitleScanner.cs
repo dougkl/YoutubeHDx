@@ -36,6 +36,12 @@ public sealed partial class SubtitleScanner
     private readonly TimeSpan _delayBetweenLookups;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    public const string ActivityKey = "1-subtitles";
+    public const string ActivityName = "Subtitle check";
+
+    /// <summary>Where progress is shown (the downloads window). Optional.</summary>
+    public ActivityBoard? Board { get; set; }
+
     public SubtitleScanner(Func<AppSettings> settings, IMediaProbe probe, Func<AppSettings, LyricsFinder> finder,
         Func<bool> isPaused, Action<string> log, Func<DateTimeOffset>? now = null, TimeSpan? delayBetweenLookups = null)
     {
@@ -104,10 +110,14 @@ public sealed partial class SubtitleScanner
             int good = 0, fixedN = 0, notFound = 0, skipped = 0, checkedN = 0;
             var stopped = false;
 
-            foreach (var file in Directory.EnumerateFiles(s.NasPath, "*", SearchOption.AllDirectories)
-                         .Where(f => VideoExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
-                         .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            var files = Directory.EnumerateFiles(s.NasPath, "*", SearchOption.AllDirectories)
+                .Where(f => VideoExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+            Board?.Start(ActivityKey, ActivityName, files.Count);
+            var done = 0;
+            foreach (var file in files)
             {
+                Board?.Progress(ActivityKey, done++, Path.GetFileNameWithoutExtension(file));
                 var outcome = await ScanOneAsync(file, s, flags, state, ct).ConfigureAwait(false);
                 switch (outcome)
                 {
@@ -123,10 +133,18 @@ public sealed partial class SubtitleScanner
             SaveState(state);
             var summary = new ScanSummary(checkedN, good, fixedN, notFound, skipped, stopped);
             _log($"Subtitle scan: {summary.Describe()}");
+            Board?.Finish(ActivityKey, ActivityName, $"Last full check {_now():MMM d HH:mm}: {files.Count} videos, " +
+                (checkedN == 0 ? "nothing new to check" : summary.Describe()));
             return summary;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Board?.Finish(ActivityKey, ActivityName, $"Check failed {_now():MMM d HH:mm}: {ex.Message}");
+            throw;
         }
         finally
         {
+            if (Board?.Get(ActivityKey) is { Running: true }) Board.Finish(ActivityKey, ActivityName, "Stopped");
             _gate.Release();
         }
     }
@@ -141,6 +159,7 @@ public sealed partial class SubtitleScanner
             var state = LoadState();
             var outcome = await ScanOneAsync(file, s, BadSubsList.Read(s.NasPath), state, ct).ConfigureAwait(false);
             SaveState(state);
+            Board?.Note(ActivityKey, ActivityName, $"{_now():HH:mm} new download {Path.GetFileNameWithoutExtension(file)}: {Describe(outcome)}");
             return outcome;
         }
         finally
@@ -230,6 +249,16 @@ public sealed partial class SubtitleScanner
         _log($"Subtitle scan: added {Path.GetFileName(written)} from {found.Source} ({found.Matched})");
         return ScanOutcome.Fixed;
     }
+
+    public static string Describe(ScanOutcome outcome) => outcome switch
+    {
+        ScanOutcome.Good or ScanOutcome.Unchanged => "subtitles OK",
+        ScanOutcome.Fixed => "lyrics subtitles added",
+        ScanOutcome.NotFound => "no subtitles, no matching lyrics found (tries again later)",
+        ScanOutcome.Paused => "waits until downloads resume",
+        ScanOutcome.Unreadable => "could not read the file (tries again later)",
+        _ => "skipped",
+    };
 
     /// <summary>Null if the video already has usable English subtitles; otherwise why not.</summary>
     private async Task<string?> CurrentSubtitleProblemAsync(string file, MediaInfo media, CancellationToken ct)

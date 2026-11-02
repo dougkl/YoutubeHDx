@@ -9,6 +9,7 @@ public static class YtDlpArgs
     public const string ProgressMarker = "[HDX]";
     public const string StartMarker = "[HDXSTART]";
     public const string DoneMarker = "[HDXDONE]";
+    public const string PlaylistMarker = "[HDXLIST]";
 
     public static List<string> Build(AppSettings s, DownloadJob job, string? cookiesFile)
     {
@@ -42,7 +43,8 @@ public static class YtDlpArgs
 
             "--progress-template",
             $"download:{ProgressMarker}%(info.id)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
-            "--print", $"before_dl:{StartMarker}%(id)s|%(playlist_title|)s|%(title)s",
+            "--print", $"before_dl:{StartMarker}%(id)s|%(playlist_title|)s|%(playlist_index|)s|%(n_entries|)s|%(title)s",
+            "--print", $"playlist:{PlaylistMarker}%(playlist_count|)s|%(title|)s",
             "--print", $"after_move:{DoneMarker}%(filepath)s",
         };
 

@@ -20,6 +20,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _pauseTicker = new() { Interval = 15_000 };
     private readonly SubtitleScanner _scanner;
     private readonly InfoFileWriter _info;
+    private readonly ActivityBoard _board = new();
     private readonly CancellationTokenSource _stop = new();
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -45,13 +46,16 @@ internal sealed class TrayContext : ApplicationContext
         // Subtitle scan: new downloads right away, the whole library daily, and on demand from the tray.
         _scanner = new SubtitleScanner(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load),
             s => new LyricsFinder(Http, s.OpenSubtitlesApiKey), () => _queue.PauseState.IsPaused, FileLog.Write);
-        _info = new InfoFileWriter(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), Http, FileLog.Write);
-        _queue.FileSaved += path => _ = SafeBackground(async () =>
+        _scanner.Board = _board;
+        _info = new InfoFileWriter(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), Http, FileLog.Write) { Board = _board };
+        _queue.FileSaved += (path, job) => _ = SafeBackground(async () =>
         {
             var s = SettingsStore.Load();
             if (s.WriteInfoFiles) await _info.WriteForAsync(path, _stop.Token);
-            if (s.SubtitleScan) await _scanner.ScanFileAsync(path, _stop.Token);
+            if (s.SubtitleScan) job.AddSubtitleOutcome(await _scanner.ScanFileAsync(path, _stop.Token)); // shown on the job's line
         });
+        if (settings.SubtitleScan)
+            _board.Finish(SubtitleScanner.ActivityKey, SubtitleScanner.ActivityName, "Checks each new download; the full check runs 30 min after start-up, then daily");
         _ = SafeBackground(() => TidyLibraryAsync(announce: false)); // drop old date prefixes, add missing .nfo/.jpg
         _ = DailySubtitleScanAsync();
 
@@ -306,7 +310,7 @@ internal sealed class TrayContext : ApplicationContext
 
     private void ShowForm()
     {
-        if (_form is null || _form.IsDisposed) _form = new MainForm(_queue);
+        if (_form is null || _form.IsDisposed) _form = new MainForm(_queue, _board);
         _form.Show();
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
         _form.Activate();

@@ -9,9 +9,9 @@ namespace YoutubeHDx.Core;
 public sealed class YtDlpRunner
 {
     private readonly Action<string> _log;
-    private readonly Action<string>? _fileSaved;
+    private readonly Action<DownloadJob, string>? _fileSaved;
 
-    public YtDlpRunner(Action<string> log, Action<string>? fileSaved = null)
+    public YtDlpRunner(Action<string> log, Action<DownloadJob, string>? fileSaved = null)
     {
         _log = log;
         _fileSaved = fileSaved;
@@ -47,8 +47,9 @@ public sealed class YtDlpRunner
             if (e.Data is null) return;
             _log($"[yt-dlp] {e.Data}");
             if (!e.Data.StartsWith("ERROR:", StringComparison.Ordinal)) return;
-            job.SetError(e.Data);
+            // Removed/private/blocked videos are counted (and listed in the CSV), not reported as download errors.
             if (UnavailableVideos.Parse(e.Data) is { } gone) job.AddUnavailable(gone);
+            else job.SetError(e.Data);
         };
 
         _log($"Starting job {job.Id}: {job.Url}");
@@ -91,12 +92,23 @@ public sealed class YtDlpRunner
 
         if (line.StartsWith(YtDlpArgs.StartMarker, StringComparison.Ordinal))
         {
-            // id|playlist title|video title (the title is last, so a "|" inside it is kept)
+            // id|playlist title|index|count|video title (the title is last, so a "|" inside it is kept)
             var payload = line[YtDlpArgs.StartMarker.Length..];
-            var parts = payload.Split('|', 3);
-            if (parts.Length == 3) job.ItemStarted(parts[2], parts[1]);
+            var parts = payload.Split('|', 5);
+            if (parts.Length == 5 && IsCount(parts[2]) && IsCount(parts[3]))
+                job.ItemStarted(parts[4], parts[1], Count(parts[2]), Count(parts[3]));
+            else if (parts.Length >= 3) job.ItemStarted(string.Join('|', parts[2..]), parts[1]);
             else job.ItemStarted(parts.Length == 2 ? parts[1] : payload);
             _log($"Downloading: {payload}");
+            return;
+        }
+
+        if (line.StartsWith(YtDlpArgs.PlaylistMarker, StringComparison.Ordinal))
+        {
+            // count|playlist title, printed once yt-dlp got through the whole playlist
+            var parts = line[YtDlpArgs.PlaylistMarker.Length..].Split('|', 2);
+            job.PlaylistDone(parts.Length == 2 ? parts[1] : null, Count(parts[0]));
+            _log($"Playlist checked: {line[YtDlpArgs.PlaylistMarker.Length..]}");
             return;
         }
 
@@ -105,12 +117,16 @@ public sealed class YtDlpRunner
             var file = line[YtDlpArgs.DoneMarker.Length..];
             job.ItemCompleted(file);
             _log($"Saved: {file}");
-            try { _fileSaved?.Invoke(file); } catch (Exception ex) { _log($"FileSaved handler threw: {ex.Message}"); }
+            try { _fileSaved?.Invoke(job, file); } catch (Exception ex) { _log($"FileSaved handler threw: {ex.Message}"); }
             return;
         }
 
         _log($"[yt-dlp] {line}");
     }
+
+    private static bool IsCount(string s) => s.Trim() is "" or "NA" || int.TryParse(s.Trim(), out _);
+
+    private static int? Count(string s) => int.TryParse(s.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var n) ? n : null;
 
     private static string? Clean(string s)
     {

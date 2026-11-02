@@ -27,7 +27,7 @@ public sealed class DownloadQueue : IAsyncDisposable
     public DownloadQueue(Action<string> log)
     {
         _log = log;
-        _runner = new YtDlpRunner(log, f => FileSaved?.Invoke(f));
+        _runner = new YtDlpRunner(log, (job, f) => FileSaved?.Invoke(f, job));
         _pause = PauseStore.Load();
         if (_pause.IsPaused) _log($"Starting paused: {_pause.Describe()}");
         RestoreQueue();
@@ -36,8 +36,8 @@ public sealed class DownloadQueue : IAsyncDisposable
     /// <summary>Raised on a worker thread when a job reaches a final state.</summary>
     public event Action<DownloadJob>? JobFinished;
 
-    /// <summary>Raised (on a worker thread) for every video file saved to the NAS.</summary>
-    public event Action<string>? FileSaved;
+    /// <summary>Raised (on a worker thread) for every video file saved to the NAS, with the job that saved it.</summary>
+    public event Action<string, DownloadJob>? FileSaved;
 
     /// <summary>When set, unavailable videos a job runs into are written to the CSV after the job.</summary>
     public UnavailableReporter? Reporter { get; set; }
@@ -132,19 +132,30 @@ public sealed class DownloadQueue : IAsyncDisposable
 
     // ---------------------------------------------------------------- jobs
 
-    /// <summary>Queues a URL. If the same URL is already queued or running, returns that job instead.</summary>
-    public (bool Added, DownloadJob Job) Enqueue(string url, bool noPlaylist, string source)
+    /// <summary>
+    /// Queues a URL. If the same URL is already queued or running, returns that job instead.
+    /// Each URL has one line: a finished earlier run of it is replaced by the new one (its result is kept as "last run").
+    /// </summary>
+    public (bool Added, DownloadJob Job) Enqueue(string url, bool noPlaylist, string source, string? name = null)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme is not ("https" or "http"))
             throw new ArgumentException($"Not a valid URL: {url}", nameof(url));
 
         lock (_jobsGate)
         {
-            var existing = _jobs.FirstOrDefault(j => j.IsActive && j.NoPlaylist == noPlaylist &&
-                                                     string.Equals(j.Url, url, StringComparison.OrdinalIgnoreCase));
+            bool Same(DownloadJob j) => j.NoPlaylist == noPlaylist && string.Equals(j.Url, url, StringComparison.OrdinalIgnoreCase);
+            var existing = _jobs.FirstOrDefault(j => j.IsActive && Same(j));
             if (existing is not null) return (false, existing);
 
-            var job = new DownloadJob { Url = url, NoPlaylist = noPlaylist, Source = source };
+            var previous = _jobs.LastOrDefault(j => j.IsFinished && Same(j));
+            _jobs.RemoveAll(j => j.IsFinished && Same(j));
+
+            var job = new DownloadJob
+            {
+                Url = url, NoPlaylist = noPlaylist, Source = source,
+                DisplayName = string.IsNullOrWhiteSpace(name) ? previous?.PlaylistTitle ?? previous?.DisplayName : name,
+                PreviousResult = previous?.ShortResult(),
+            };
             _jobs.Add(job);
             TrimHistory();
             _channel.Writer.TryWrite(job);
@@ -282,10 +293,9 @@ public sealed class DownloadQueue : IAsyncDisposable
                     try { await reporter.ReportAsync(job, cts.Token).ConfigureAwait(false); }
                     catch (Exception ex) when (ex is not OperationCanceledException) { _log($"Unavailable-videos CSV: {ex.Message}"); }
                 }
-                job.MarkFinished(exitCode == 0 ? JobStatus.Completed
-                    : job.ItemsCompleted > 0 ? JobStatus.CompletedWithErrors
-                    : JobStatus.Failed);
-                if (exitCode != 0 && job.Error is null) job.SetError($"yt-dlp exited with code {exitCode}. See the log.");
+                job.MarkFinished(FinalStatus(job, exitCode));
+                if (exitCode != 0 && job.Error is null && job.Unavailable.Count == 0)
+                    job.SetError($"yt-dlp stopped with an error (code {exitCode}). See the log.");
                 return true;
             }
             catch (OperationCanceledException)
@@ -319,6 +329,18 @@ public sealed class DownloadQueue : IAsyncDisposable
                 cts.Dispose();
             }
         }
+    }
+
+    /// <summary>
+    /// yt-dlp exits with 1 when any video failed, even if that video was only removed from YouTube. A playlist whose
+    /// only problems are removed/private/blocked videos is "done" (they're listed in the CSV); real errors show as such.
+    /// </summary>
+    internal static JobStatus FinalStatus(DownloadJob job, int exitCode)
+    {
+        if (exitCode == 0) return JobStatus.Completed;
+        if (!job.NoPlaylist && job.ErrorCount == 0 && job.Unavailable.Count > 0) return JobStatus.Completed;
+        if (job.ItemsCompleted > 0 || (!job.NoPlaylist && job.PlaylistFinished)) return JobStatus.CompletedWithErrors;
+        return JobStatus.Failed;
     }
 
     public async ValueTask DisposeAsync()

@@ -23,20 +23,35 @@ internal static class FakeYtDlp
         switch (mode)
         {
             case "ok":
-                Out("[HDXSTART]vid1|My MTV|First Video");
+                Out("[HDXSTART]vid1|My MTV|1|1|First Video");
                 Out("[HDX]vid1|  45.3%| 12.00MiB/s|00:10");
                 Out("[HDX]vid1| 100.0%| 12.00MiB/s|00:00");
                 Out($"[HDXDONE]{Path.Combine(nas, "Singles", "First Video [vid1].mkv")}");
                 return 0;
 
             case "playlist-partial":
-                Out("[HDXSTART]vid1|My MTV|First Video");
+                // one new video, one removed from YouTube: yt-dlp still exits with 1
+                Out("[HDXSTART]vid1|My MTV|1|2|First Video");
                 Out($"[HDXDONE]{Path.Combine(nas, "PL", "First Video [vid1].mkv")}");
-                Console.Error.WriteLine("ERROR: [youtube] vid2: Video unavailable");
+                Console.Error.WriteLine("ERROR: [youtube] vid00000002: Video unavailable");
+                Out("[HDXLIST]2|My MTV");
                 return 1;
 
+            case "playlist-error":
+                Out("[HDXSTART]vid1|My MTV|1|2|First Video");
+                Out($"[HDXDONE]{Path.Combine(nas, "PL", "First Video [vid1].mkv")}");
+                Console.Error.WriteLine("WARNING: [youtube] something harmless");
+                Console.Error.WriteLine("ERROR: [youtube] vid2: Sign in to confirm you’re not a bot. Use --cookies-from-browser");
+                Out("[HDXLIST]2|My MTV");
+                return 1;
+
+            case "uptodate":
+                // everything already in the archive: yt-dlp downloads nothing and only finishes the playlist
+                Out("[HDXLIST]340|My MTV (Always updated)");
+                return 0;
+
             case "fail":
-                Console.Error.WriteLine("ERROR: [youtube] vid9: Sign in to confirm your age");
+                Console.Error.WriteLine("ERROR: [youtube] vid00000009: Sign in to confirm your age");
                 return 1;
 
             case "playlist-unavailable":
@@ -48,7 +63,7 @@ internal static class FakeYtDlp
                     Out("okvideo0001\tGood Song\tGood Band\tMy MTV");
                     return 0;
                 }
-                Out("[HDXSTART]okvideo0001|My MTV|Good Song");
+                Out("[HDXSTART]okvideo0001|My MTV|3|3|Good Song");
                 Out($"[HDXDONE]{Path.Combine(nas, "PL", "Good Song [okvideo0001].mkv")}");
                 Console.Error.WriteLine("ERROR: [youtube] gone0000001: Video unavailable. This video contains content from SME, who has blocked it in your country on copyright grounds");
                 Console.Error.WriteLine("ERROR: [youtube] gone0000002: Video unavailable. This video has been removed by the uploader");

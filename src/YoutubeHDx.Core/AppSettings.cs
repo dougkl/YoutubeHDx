@@ -142,6 +142,18 @@ public static class SettingsStore
         }
     }
 
+    public static void SetPlaylistNameIfMissing(string url, string name)
+    {
+        lock (Gate)
+        {
+            var s = Load();
+            var p = s.WatchedPlaylists.FirstOrDefault(x => string.Equals(x.Url, url, StringComparison.OrdinalIgnoreCase));
+            if (p is null || !string.IsNullOrWhiteSpace(p.Name)) return;
+            p.Name = name;
+            SaveUnlocked(s);
+        }
+    }
+
     private static void SaveUnlocked(AppSettings settings)
     {
         AppPaths.EnsureDataDir();

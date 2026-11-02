@@ -65,17 +65,17 @@ function renderJobs(reply) {
 
     const title = document.createElement('div');
     title.className = 'title';
-    title.textContent = j.title || j.url;
-    title.title = j.error || j.lastFile || j.url;
+    title.textContent = j.name || j.title || j.url;
+    title.title = [j.summary, j.error, j.url].filter(Boolean).join('\n');
 
     const meta = document.createElement('div');
     meta.className = 'meta';
     const status = document.createElement('span');
     status.className = `s-${j.status}`;
-    status.textContent = STATUS_LABEL[j.status] || j.status;
+    status.textContent = j.statusText || STATUS_LABEL[j.status] || j.status;
     const detail = document.createElement('span');
-    if (j.status === 'running') detail.textContent = [`${j.percent.toFixed(1)}%`, j.speed, j.eta && `ETA ${j.eta}`].filter(Boolean).join(' · ');
-    else if (j.itemsCompleted > 1) detail.textContent = `${j.itemsCompleted} videos`;
+    if (j.status === 'running' && j.title) detail.textContent = [`${j.percent.toFixed(1)}%`, j.speed, j.eta && `ETA ${j.eta}`].filter(Boolean).join(' · ');
+    else if (j.unavailableCount > 0) detail.textContent = `${j.unavailableCount} unavailable`;
     meta.append(status, detail);
 
     li.append(title, meta);

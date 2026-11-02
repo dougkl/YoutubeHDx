@@ -30,6 +30,12 @@ public sealed partial class InfoFileWriter
     private readonly Action<string> _log;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
+    public const string ActivityKey = "2-library";
+    public const string ActivityName = "Plex info files";
+
+    /// <summary>Where progress is shown (the downloads window). Optional.</summary>
+    public ActivityBoard? Board { get; set; }
+
     public InfoFileWriter(Func<AppSettings> settings, IMediaProbe probe, HttpClient http, Action<string> log)
     {
         _settings = settings;
@@ -49,11 +55,14 @@ public sealed partial class InfoFileWriter
         {
             var root = _settings().NasPath;
             if (!Directory.Exists(root)) throw new InvalidOperationException($"NAS folder '{root}' is not reachable.");
-            int nfos = 0, pics = 0, failed = 0;
-            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-                         .Where(f => VideoExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
-                         .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList())
+            int nfos = 0, pics = 0, failed = 0, done = 0;
+            var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+                .Where(f => VideoExtensions.Contains(Path.GetExtension(f), StringComparer.OrdinalIgnoreCase))
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+            Board?.Start(ActivityKey, ActivityName, files.Count);
+            foreach (var file in files)
             {
+                Board?.Progress(ActivityKey, done++, Path.GetFileNameWithoutExtension(file));
                 var (nfo, pic, ok) = await WriteOneAsync(root, file, ct).ConfigureAwait(false);
                 if (nfo) nfos++;
                 if (pic) pics++;
@@ -61,10 +70,13 @@ public sealed partial class InfoFileWriter
             }
             var summary = new InfoSummary(nfos, pics, failed);
             if (nfos + pics + failed > 0) _log($"Info files: {summary.Describe()}");
+            Board?.Finish(ActivityKey, ActivityName, $"Last check {DateTimeOffset.Now:MMM d HH:mm}: {files.Count} videos, " +
+                (nfos + pics + failed == 0 ? "all have their .nfo and picture" : summary.Describe()));
             return summary;
         }
         finally
         {
+            if (Board?.Get(ActivityKey) is { Running: true }) Board.Finish(ActivityKey, ActivityName, "Stopped");
             _gate.Release();
         }
     }

@@ -11,6 +11,15 @@ public sealed class WatchScheduler : IDisposable
     {
         _queue = queue;
         _log = log;
+        _queue.JobFinished += RememberPlaylistName;
+    }
+
+    /// <summary>Saves the playlist's YouTube title as its name, so the downloads window shows it from the start next time.</summary>
+    private void RememberPlaylistName(DownloadJob job)
+    {
+        if (job.Source != "watch" || string.IsNullOrWhiteSpace(job.PlaylistTitle)) return;
+        try { SettingsStore.SetPlaylistNameIfMissing(job.Url, job.PlaylistTitle); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException) { _log($"Could not save playlist name: {ex.Message}"); }
     }
 
     public void Start() => _ = LoopAsync();
@@ -24,7 +33,7 @@ public sealed class WatchScheduler : IDisposable
         {
             try
             {
-                if (_queue.Enqueue(p.Url, noPlaylist: false, source: "watch").Added) added++;
+                if (_queue.Enqueue(p.Url, noPlaylist: false, source: "watch", name: p.Name).Added) added++;
             }
             catch (ArgumentException ex)
             {
@@ -62,6 +71,7 @@ public sealed class WatchScheduler : IDisposable
 
     public void Dispose()
     {
+        _queue.JobFinished -= RememberPlaylistName;
         _stop.Cancel();
         _stop.Dispose();
     }

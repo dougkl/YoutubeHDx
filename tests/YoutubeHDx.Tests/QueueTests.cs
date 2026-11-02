@@ -28,6 +28,8 @@ internal static class QueueTests
         Assert.Equal(JobStatus.Completed, s.Status);
         Assert.Equal("First Video", s.Title);
         Assert.Equal("My MTV", s.PlaylistTitle);            // shown in the downloads window
+        Assert.Equal("First Video", s.Name);                 // a single video is named after itself
+        Assert.Equal("Done: 1 new", s.StatusText);
         Assert.True(s.UpdatedAt >= s.CreatedAt);
         Assert.Equal(1, s.ItemsCompleted);
         Assert.Equal(100.0, s.Percent);
@@ -45,7 +47,7 @@ internal static class QueueTests
     }
 
     [Test]
-    public static async Task PlaylistWithOneBadVideoIsCompletedWithErrors()
+    public static async Task PlaylistWithOneRemovedVideoIsDone()
     {
         TestEnv.UseFakeYtDlp("playlist-partial");
         var (queue, finished) = await StartQueue();
@@ -54,10 +56,81 @@ internal static class QueueTests
         queue.Enqueue("https://www.youtube.com/playlist?list=PL1", noPlaylist: false, source: "test");
         var s = (await finished.WaitAsync(TimeSpan.FromSeconds(15))).ToSnapshot();
 
-        Assert.Equal(JobStatus.CompletedWithErrors, s.Status);
+        // A video removed from YouTube is not a download error: the playlist is done, the video is counted.
+        Assert.Equal(JobStatus.Completed, s.Status);
         Assert.Equal(1, s.ItemsCompleted);
-        Assert.Contains("Video unavailable", s.Error!);
+        Assert.Equal(1, s.UnavailableCount);
+        Assert.Equal(0, s.ErrorCount);
+        Assert.Equal(null, s.Error);
+        Assert.Equal("My MTV", s.Name);
+        Assert.Equal("Done: 1 new", s.StatusText);
+        Assert.Equal("2 videos in the playlist · 1 new video saved · 1 unavailable on YouTube (see the unavailable-videos list)", s.Summary);
         Assert.Contains("--yes-playlist", TestEnv.ReadFakeArgs());
+    }
+
+    [Test]
+    public static async Task RealErrorsAreExplainedInPlainWords()
+    {
+        TestEnv.UseFakeYtDlp("playlist-error");
+        var (queue, finished) = await StartQueue();
+        await using var _ = queue;
+
+        queue.Enqueue("https://www.youtube.com/playlist?list=PL1", noPlaylist: false, source: "test");
+        var s = (await finished.WaitAsync(TimeSpan.FromSeconds(15))).ToSnapshot();
+
+        Assert.Equal(JobStatus.CompletedWithErrors, s.Status);
+        Assert.Equal(1, s.ErrorCount);                     // the WARNING line is not an error
+        Assert.Equal("Done: 1 new, some failed", s.StatusText);
+        Assert.Contains("1 could not be downloaded: YouTube wants you signed in again", s.Summary!);
+        Assert.Contains("not a bot", s.Error!);            // the raw message is still there (tooltip and log)
+    }
+
+    [Test]
+    public static async Task PlaylistWithNothingNewIsUpToDate()
+    {
+        TestEnv.UseFakeYtDlp("uptodate");
+        var (queue, finished) = await StartQueue();
+        await using var _ = queue;
+
+        queue.Enqueue("https://www.youtube.com/playlist?list=PL1", noPlaylist: false, source: "test");
+        var s = (await finished.WaitAsync(TimeSpan.FromSeconds(15))).ToSnapshot();
+
+        Assert.Equal(JobStatus.Completed, s.Status);
+        Assert.Equal("Up to date", s.StatusText);
+        Assert.Equal("My MTV (Always updated)", s.Name);
+        Assert.Equal("340 videos in the playlist · nothing new", s.Summary);
+        Assert.Contains("playlist:[HDXLIST]%(playlist_count|)s|%(title|)s", TestEnv.ReadFakeArgs());
+    }
+
+    [Test]
+    public static async Task EachPlaylistKeepsOneLineAcrossSyncs()
+    {
+        TestEnv.UseFakeYtDlp("uptodate");
+        var queue = new DownloadQueue(_ => { });
+        await using var _ = queue;
+        var finished = 0;
+        queue.JobFinished += _ => Interlocked.Increment(ref finished);
+        queue.Start(1);
+
+        for (var sync = 1; sync <= 3; sync++)
+        {
+            queue.Enqueue("https://www.youtube.com/playlist?list=PL1", false, "watch", name: "Rock");
+            queue.Enqueue("https://www.youtube.com/playlist?list=PL2", false, "watch");
+            for (var i = 0; i < 100 && finished < sync * 2; i++) await Task.Delay(50);
+        }
+
+        var rows = queue.Snapshot();
+        Assert.Equal(2, rows.Count);                        // 2 playlists = 2 lines, however many syncs ran
+        Assert.True(rows.All(r => r.Status == JobStatus.Completed));
+
+        queue.Pause(TimeSpan.FromMinutes(5));               // so the next run waits and shows what happened last time
+        queue.Enqueue("https://www.youtube.com/playlist?list=PL1", false, "watch");
+        var waiting = queue.Snapshot().Single(r => r.Status == JobStatus.Queued);
+        Assert.Equal("My MTV (Always updated)", waiting.Name); // learned from the previous run
+        Assert.Contains(": up to date", waiting.Summary!);
+        Assert.True(waiting.Summary!.StartsWith("Last run "));
+        Assert.Equal(2, queue.Snapshot().Count);
+        queue.Resume();
     }
 
     [Test]
@@ -71,7 +144,9 @@ internal static class QueueTests
         var s = (await finished.WaitAsync(TimeSpan.FromSeconds(15))).ToSnapshot();
 
         Assert.Equal(JobStatus.Failed, s.Status);
-        Assert.Contains("Sign in to confirm your age", s.Error!);
+        Assert.Equal(1, s.UnavailableCount);
+        Assert.Equal("Failed", s.StatusText);
+        Assert.Contains("Unavailable on YouTube (age restricted): Sign in to confirm your age", s.Summary!);
     }
 
     [Test]
