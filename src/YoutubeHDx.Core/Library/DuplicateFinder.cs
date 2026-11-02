@@ -81,7 +81,7 @@ public sealed partial class DuplicateFinder
 
     // ---------------------------------------------------------------- scanning
 
-    /// <param name="preview">Work everything out but change no .plexignore and save nothing (to look before hiding).</param>
+    /// <param name="preview">Work everything out but change no .plexignore (to look before hiding).</param>
     public async Task<DuplicateResults> ScanAsync(CancellationToken ct, bool preview = false)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);
@@ -105,7 +105,7 @@ public sealed partial class DuplicateFinder
             var results = new DuplicateResults(DateTimeOffset.Now, facts.Count, roots, dups, check);
             _state.Last = results;
             results = ApplyIgnores(roots, files, write: !preview);
-            if (!preview) _state.Save();
+            _state.Save(); // (a preview keeps the cached facts too, so the real run is quick)
 
             var hidden = results.Duplicates.Count(d => d.State == "ignored");
             var summary = $"{facts.Count} videos: {hidden} duplicate copies hidden from Plex, {results.Check.Count} to check";
