@@ -4,7 +4,8 @@ namespace YoutubeHDx.App;
 
 /// <summary>
 /// Download list: one line per playlist or video (a new sync replaces the line of the previous one), plus the
-/// background tasks (subtitle check, Plex info files). Closing the window hides it; the app keeps running in the tray.
+/// background tasks (subtitle check, Plex info files, duplicate check), and the Duplicates / Check these tabs.
+/// Closing the window hides it; the app keeps running in the tray.
 /// </summary>
 internal sealed class MainForm : Form
 {
@@ -23,13 +24,13 @@ internal sealed class MainForm : Form
     private readonly ListViewGroup _background = new("background", "Subtitles and Plex files");
     private readonly System.Windows.Forms.Timer _refresh = new() { Interval = 1000 };
 
-    public MainForm(DownloadQueue queue, ActivityBoard board)
+    public MainForm(DownloadQueue queue, ActivityBoard board, Core.Library.DuplicateFinder duplicates, Func<CancellationToken> stop)
     {
         _queue = queue;
         _board = board;
         Text = "YoutubeHDx — 4K downloads";
         Width = 1550;
-        Height = 520;
+        Height = 600;
         StartPosition = FormStartPosition.CenterScreen;
         Icon = SystemIcons.Application;
 
@@ -83,9 +84,14 @@ internal sealed class MainForm : Form
         bottom.Controls.Add(clear);
         bottom.Controls.Add(hint);
 
-        Controls.Add(_list);
-        Controls.Add(top);
-        Controls.Add(bottom);
+        var downloadsTab = new TabPage("Downloads");
+        downloadsTab.Controls.Add(_list);
+        downloadsTab.Controls.Add(top);
+        downloadsTab.Controls.Add(bottom);
+        var dups = new DuplicatesPanel(duplicates, this, stop);
+        var tabs = new TabControl { Dock = DockStyle.Fill };
+        tabs.TabPages.AddRange([downloadsTab, dups.DuplicatesTab, dups.CheckTab]);
+        Controls.Add(tabs);
 
         _refresh.Tick += (_, _) => RefreshList();
         _refresh.Start();

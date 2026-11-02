@@ -105,6 +105,17 @@ if (-not (Test-Path $Settings)) {
 }
 
 $s = Get-Content $Settings -Raw | ConvertFrom-Json
+# Settings added in newer versions (e.g. which folders the duplicate check looks through) come from the pack;
+# anything you already have is left as it is.
+if (Test-Path $seed) {
+    $seedObj = Get-Content $seed -Raw | ConvertFrom-Json
+    foreach ($p in $seedObj.PSObject.Properties) {
+        if (-not $s.PSObject.Properties[$p.Name]) {
+            $s | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value
+            Ok "New setting from the pack: $($p.Name)"
+        }
+    }
+}
 # Point at the exact tools so the app never depends on PATH being refreshed.
 foreach ($pair in @(@('ytDlpPath', 'yt-dlp'), @('ffmpegLocation', 'ffmpeg'))) {
     $key, $tool = $pair

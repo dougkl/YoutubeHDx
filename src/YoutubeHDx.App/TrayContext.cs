@@ -21,6 +21,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly SubtitleScanner _scanner;
     private readonly InfoFileWriter _info;
     private readonly ActivityBoard _board = new();
+    private readonly DuplicateFinder _duplicates;
     private readonly CancellationTokenSource _stop = new();
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -48,6 +49,7 @@ internal sealed class TrayContext : ApplicationContext
             s => new LyricsFinder(Http, s.OpenSubtitlesApiKey), () => _queue.PauseState.IsPaused, FileLog.Write);
         _scanner.Board = _board;
         _info = new InfoFileWriter(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), Http, FileLog.Write) { Board = _board };
+        _duplicates = new DuplicateFinder(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), FileLog.Write) { Board = _board };
         _queue.FileSaved += (path, job) => _ = SafeBackground(async () =>
         {
             var s = SettingsStore.Load();
@@ -118,6 +120,12 @@ internal sealed class TrayContext : ApplicationContext
         var library = new ToolStripMenuItem("Library (Plex)");
         library.DropDownItems.Add("Fix file names and add info files now", null,
             (_, _) => _ = SafeBackground(() => TidyLibraryAsync(announce: true)));
+        library.DropDownItems.Add("Find duplicates now", null, (_, _) => _ = SafeBackground(async () =>
+        {
+            var r = await _duplicates.ScanAsync(_stop.Token);
+            _ui.Post(_ => _tray.ShowBalloonTip(6000, "Duplicate check finished",
+                $"{r.Duplicates.Count(d => d.State == "ignored")} copies hidden from Plex, {r.Check.Count} to check (Show downloads → Duplicates).", ToolTipIcon.Info), null);
+        }));
         library.DropDownItems.Add("Open renamed-files list", null, (_, _) =>
             SafeRun(() => OpenIfExists(Path.Combine(SettingsStore.Load().NasPath, DatedNameFixer.CsvName), "No files renamed so far.")));
         menu.Items.Add(library);
@@ -165,6 +173,15 @@ internal sealed class TrayContext : ApplicationContext
             if (announce) _ui.Post(_ => _tray.ShowBalloonTip(3000, "YoutubeHDx", "Adding info files and pictures for Plex…", ToolTipIcon.Info), null);
             var info = await _info.WriteAllAsync(_stop.Token);
             if (info.Nfos + info.Pictures + info.Failed > 0) parts.Add(info.Describe());
+        }
+        if (s.DuplicateCheck)
+        {
+            try
+            {
+                var r = await _duplicates.ScanAsync(_stop.Token);
+                if (announce) parts.Add($"{r.Duplicates.Count(d => d.State == "ignored")} duplicate copies hidden, {r.Check.Count} to check");
+            }
+            catch (InvalidOperationException ex) { FileLog.Write($"Duplicate check skipped: {ex.Message}"); }
         }
         if (announce || parts.Count > 0)
         {
@@ -310,7 +327,7 @@ internal sealed class TrayContext : ApplicationContext
 
     private void ShowForm()
     {
-        if (_form is null || _form.IsDisposed) _form = new MainForm(_queue, _board);
+        if (_form is null || _form.IsDisposed) _form = new MainForm(_queue, _board, _duplicates, () => _stop.Token);
         _form.Show();
         if (_form.WindowState == FormWindowState.Minimized) _form.WindowState = FormWindowState.Normal;
         _form.Activate();
