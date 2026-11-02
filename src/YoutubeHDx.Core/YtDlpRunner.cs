@@ -91,9 +91,11 @@ public sealed class YtDlpRunner
 
         if (line.StartsWith(YtDlpArgs.StartMarker, StringComparison.Ordinal))
         {
+            // id|playlist title|video title (the title is last, so a "|" inside it is kept)
             var payload = line[YtDlpArgs.StartMarker.Length..];
-            var sep = payload.IndexOf('|');
-            job.ItemStarted(sep >= 0 ? payload[(sep + 1)..] : payload);
+            var parts = payload.Split('|', 3);
+            if (parts.Length == 3) job.ItemStarted(parts[2], parts[1]);
+            else job.ItemStarted(parts.Length == 2 ? parts[1] : payload);
             _log($"Downloading: {payload}");
             return;
         }

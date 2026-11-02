@@ -13,7 +13,9 @@ const YHDX_TITLE_NOISE =
 
 function yhdxCleanPart(s) {
   return String(s || '')
+    .replace(/[’‘´]/g, "'")                                         // "Don’t" -> "Don't" (LRCLIB uses straight quotes)
     .replace(YHDX_TITLE_NOISE, '')
+    .replace(/\s+[-–—]\s+[^-–—]*\b(video|remaster(ed)?|version|official)\b[^-–—]*$/i, '') // "... - Original Video 1985"
     .replace(/\s+[|/]\s+.*$/, '')                                   // "Song | Some Channel"
     .replace(/\s+(official\s+(music\s+)?video|official\s+audio|music\s+video|lyric\s+video)\s*$/i, '')
     .replace(/["“”]/g, '')

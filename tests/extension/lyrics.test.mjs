@@ -33,6 +33,12 @@ describe('artist and song from the video title', () => {
     assert.equal(first('Song Name [4K Remastered]', 'Some Band').track, 'Song Name');
   });
 
+  test('curly apostrophes and "- Original Video 1985" tails (same as the downloader)', () => {
+    assert.equal(first('Oasis - Don’t Look Back In Anger', 'Oasis').track, "Don't Look Back In Anger");
+    assert.equal(first('OPUS - Live Is Life - Original Video 1985', 'OPUS').track, 'Live Is Life');
+    assert.equal(first('OPUS - Live Is Life', 'OPUS').track, 'Live Is Life');
+  });
+
   test('handles en/em dashes and quoted titles', () => {
     assert.deepEqual(first('Simple Minds – "Don\'t You (Forget About Me)"', 'x'), { artist: 'Simple Minds', track: 'Don\'t You (Forget About Me)' });
   });

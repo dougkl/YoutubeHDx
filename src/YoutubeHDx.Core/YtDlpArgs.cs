@@ -42,7 +42,7 @@ public static class YtDlpArgs
 
             "--progress-template",
             $"download:{ProgressMarker}%(info.id)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
-            "--print", $"before_dl:{StartMarker}%(id)s|%(title)s",
+            "--print", $"before_dl:{StartMarker}%(id)s|%(playlist_title|)s|%(title)s",
             "--print", $"after_move:{DoneMarker}%(filepath)s",
         };
 

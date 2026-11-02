@@ -27,6 +27,8 @@ internal static class QueueTests
 
         Assert.Equal(JobStatus.Completed, s.Status);
         Assert.Equal("First Video", s.Title);
+        Assert.Equal("My MTV", s.PlaylistTitle);            // shown in the downloads window
+        Assert.True(s.UpdatedAt >= s.CreatedAt);
         Assert.Equal(1, s.ItemsCompleted);
         Assert.Equal(100.0, s.Percent);
         Assert.True(s.LastFile!.EndsWith("First Video [vid1].mkv"));

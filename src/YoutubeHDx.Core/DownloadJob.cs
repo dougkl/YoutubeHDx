@@ -15,7 +15,9 @@ public sealed record JobSnapshot(
     string? LastFile,
     string? Error,
     string Source,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? PlaylistTitle = null,
+    DateTimeOffset? UpdatedAt = null);
 
 /// <summary>One yt-dlp invocation: a single video or a whole playlist.</summary>
 public sealed class DownloadJob
@@ -36,6 +38,10 @@ public sealed class DownloadJob
     public int ItemsCompleted { get; private set; }
     public string? LastFile { get; private set; }
     public string? Error { get; private set; }
+    public string? PlaylistTitle { get; private set; }
+
+    /// <summary>When anything about this job last changed (shown as "Last update").</summary>
+    public DateTimeOffset UpdatedAt { get; private set; } = DateTimeOffset.Now;
 
     public bool IsActive => Status is JobStatus.Queued or JobStatus.Running or JobStatus.Paused;
 
@@ -43,7 +49,9 @@ public sealed class DownloadJob
     internal bool CancelRequested { get; set; }
     public bool IsFinished => !IsActive;
 
-    internal void MarkRunning() { lock (_gate) Status = JobStatus.Running; }
+    private void Touch() => UpdatedAt = DateTimeOffset.Now;
+
+    internal void MarkRunning() { lock (_gate) { Status = JobStatus.Running; Touch(); } }
 
     internal void MarkFinished(JobStatus status)
     {
@@ -53,12 +61,13 @@ public sealed class DownloadJob
             Speed = null;
             Eta = null;
             if (status == JobStatus.Completed) Percent = 100;
+            Touch();
         }
     }
 
     internal void MarkPaused()
     {
-        lock (_gate) { Status = JobStatus.Paused; Speed = null; Eta = null; }
+        lock (_gate) { Status = JobStatus.Paused; Speed = null; Eta = null; Touch(); }
     }
 
     internal bool TryCancelQueued()
@@ -67,23 +76,30 @@ public sealed class DownloadJob
         {
             if (Status is not (JobStatus.Queued or JobStatus.Paused)) return false;
             Status = JobStatus.Canceled;
+            Touch();
             return true;
         }
     }
 
-    internal void ItemStarted(string title)
+    internal void ItemStarted(string title, string? playlistTitle = null)
     {
-        lock (_gate) { Title = title; Percent = 0; }
+        lock (_gate)
+        {
+            Title = title;
+            Percent = 0;
+            if (!string.IsNullOrWhiteSpace(playlistTitle) && playlistTitle != "NA") PlaylistTitle = playlistTitle;
+            Touch();
+        }
     }
 
     internal void ReportProgress(double percent, string? speed, string? eta)
     {
-        lock (_gate) { Percent = percent; Speed = speed; Eta = eta; }
+        lock (_gate) { Percent = percent; Speed = speed; Eta = eta; Touch(); }
     }
 
     internal void ItemCompleted(string file)
     {
-        lock (_gate) { ItemsCompleted++; LastFile = file; }
+        lock (_gate) { ItemsCompleted++; LastFile = file; Touch(); }
     }
 
     private readonly List<UnavailableVideo> _unavailable = new();
@@ -95,12 +111,13 @@ public sealed class DownloadJob
 
     internal void SetError(string error)
     {
-        lock (_gate) Error = error;
+        lock (_gate) { Error = error; Touch(); }
     }
 
     public JobSnapshot ToSnapshot()
     {
         lock (_gate)
-            return new JobSnapshot(Id, Url, Status, Title, Percent, Speed, Eta, ItemsCompleted, LastFile, Error, Source, CreatedAt);
+            return new JobSnapshot(Id, Url, Status, Title, Percent, Speed, Eta, ItemsCompleted, LastFile, Error, Source, CreatedAt,
+                PlaylistTitle, UpdatedAt);
     }
 }

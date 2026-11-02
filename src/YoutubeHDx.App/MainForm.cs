@@ -18,18 +18,28 @@ internal sealed class MainForm : Form
     {
         _queue = queue;
         Text = "YoutubeHDx — 4K downloads";
-        Width = 1000;
+        Width = 1500;
         Height = 480;
         StartPosition = FormStartPosition.CenterScreen;
         Icon = SystemIcons.Application;
 
-        _list.Columns.Add("Title", 330);
-        _list.Columns.Add("Status", 130);
+        _list.Columns.Add("Title", 300);
+        _list.Columns.Add("Playlist", 170);
+        _list.Columns.Add("Status", 110);
         _list.Columns.Add("Progress", 70, HorizontalAlignment.Right);
-        _list.Columns.Add("Speed", 90);
-        _list.Columns.Add("ETA", 60);
+        _list.Columns.Add("Speed", 85);
+        _list.Columns.Add("ETA", 55);
         _list.Columns.Add("Saved", 50, HorizontalAlignment.Right);
+        _list.Columns.Add("Last update", 120);
+        _list.Columns.Add("Link", 260);
         _list.Columns.Add("Details", 240);
+        // Double-click a row to open its YouTube link.
+        _list.DoubleClick += (_, _) =>
+        {
+            if (_list.SelectedItems.Count == 1 && _list.SelectedItems[0].SubItems[8].Text is { Length: > 0 } url &&
+                Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme is "https" or "http")
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(u.AbsoluteUri) { UseShellExecute = true });
+        };
 
         var add = new Button { Text = "Download 4K", AutoSize = true };
         add.Click += (_, _) => AddUrl();
@@ -93,15 +103,19 @@ internal sealed class MainForm : Form
         for (var index = 0; index < jobs.Count; index++)
         {
             var j = jobs[index];
+            var updated = (j.UpdatedAt ?? j.CreatedAt).ToLocalTime();
             var cells = new[]
             {
                 j.Title ?? j.Url,
+                j.PlaylistTitle ?? "",
                 j.Status.ToString(),
                 j.Status == JobStatus.Running ? $"{j.Percent:0.0}%" : "",
                 j.Speed ?? "",
                 j.Eta ?? "",
                 j.ItemsCompleted.ToString(),
-                j.Error ?? j.LastFile ?? j.Url,
+                updated.Date == DateTime.Today ? updated.ToString("HH:mm:ss") : updated.ToString("yyyy-MM-dd HH:mm"),
+                j.Url,
+                j.Error ?? j.LastFile ?? "",
             };
 
             if (!byId.TryGetValue(j.Id, out var item))
@@ -120,6 +134,7 @@ internal sealed class MainForm : Form
                 JobStatus.Failed => Color.Firebrick,
                 JobStatus.CompletedWithErrors => Color.DarkOrange,
                 JobStatus.Completed => Color.ForestGreen,
+                JobStatus.Paused => Color.DarkGoldenrod,
                 _ => SystemColors.WindowText,
             };
         }

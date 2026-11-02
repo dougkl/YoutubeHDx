@@ -20,9 +20,15 @@ public static partial class SongTitle
     [GeneratedRegex(@"^(.+?)\s+[-–—]\s+(.+)$")]
     private static partial Regex ArtistDashTrack();
 
+    [GeneratedRegex(@"\s+[-–—]\s+[^-–—]*\b(video|remaster(ed)?|version|official)\b[^-–—]*$", RegexOptions.IgnoreCase)]
+    private static partial Regex DashTail();
+
     public static string CleanPart(string? s)
     {
-        var t = Noise().Replace(s ?? "", "");
+        var t = (s ?? "").Replace('’', '\'').Replace('‘', '\'').Replace('´', '\'');  // "Don’t" -> "Don't" (LRCLIB uses straight quotes)
+        t = Noise().Replace(t, "");
+        t = DashTail().Replace(t, "");                                               // "Live Is Life - Original Video 1985"
+
         t = Regex.Replace(t, @"\s+[|/]\s+.*$", "");
         t = TrailingNoise().Replace(t, "");
         t = t.Replace("\"", "").Replace("“", "").Replace("”", "");

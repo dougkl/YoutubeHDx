@@ -53,6 +53,15 @@ internal static class SongTitleTests
     }
 
     [Test]
+    public static void HandlesCurlyQuotesAndDashTails()
+    {
+        Assert.Equal("Don't Look Back In Anger", First("Oasis - Don’t Look Back In Anger", "Oasis").Track);
+        Assert.Equal("Live Is Life", First("OPUS - Live Is Life - Original Video 1985", "OPUS").Track);
+        Assert.Equal("Live Is Life", First("OPUS - Live Is Life", "OPUS").Track); // "Live" in the name itself stays
+        Assert.Equal("Song", First("Band - Song - Remastered 2011", "Band").Track);
+    }
+
+    [Test]
     public static void TitleFromDownloadedFileName()
     {
         Assert.Equal("Divinyls - I Touch Myself (Official Music Video)",
