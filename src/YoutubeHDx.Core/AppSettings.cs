@@ -73,6 +73,15 @@ public sealed class AppSettings
     /// <summary>Rename files saved by older versions ("2014-07-18 - Title [id].mkv") to drop the date (only while the template has no date).</summary>
     public bool FixDatedFileNames { get; set; } = true;
 
+    /// <summary>Find the same song saved more than once and hide all but the best copy from Plex (.plexignore).</summary>
+    public bool DuplicateCheck { get; set; } = true;
+
+    /// <summary>Folders checked for duplicates (with all subfolders). Relative paths are relative to nasPath. Empty = nasPath only.</summary>
+    public List<string> DuplicateFolders { get; set; } = new();
+
+    /// <summary>Subfolders (by name) the duplicate check skips.</summary>
+    public List<string> DuplicateSkipFolders { get; set; } = new() { "needremix", "Software", "Temp" };
+
     /// <summary>Write unavailable videos (removed, private, blocked...) to a CSV in the download folder.</summary>
     public bool ReportUnavailable { get; set; } = true;
 

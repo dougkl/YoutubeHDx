@@ -10,7 +10,7 @@ public sealed record SubtitleStream(int Index, string? Language);
 
 /// <summary>What the scanner needs to know about a video file. Tags = the file's metadata (yt-dlp --embed-metadata).</summary>
 public sealed record MediaInfo(double Duration, string? Title, string? Artist, IReadOnlyList<SubtitleStream> Subtitles,
-    IReadOnlyDictionary<string, string>? Tags = null)
+    IReadOnlyDictionary<string, string>? Tags = null, int Width = 0, int Height = 0, long BitRate = 0)
 {
     public string? Tag(params string[] names)
     {
@@ -52,7 +52,7 @@ public sealed class FfmpegProbe : IMediaProbe
     {
         var json = await RunAsync(Tool("ffprobe"), ct,
             "-v", "error",
-            "-show_entries", "format=duration:format_tags:stream=index,codec_type:stream_tags=language",
+            "-show_entries", "format=duration,bit_rate:format_tags:stream=index,codec_type,width,height:stream_tags=language:stream_disposition=attached_pic",
             "-of", "json", "--", path).ConfigureAwait(false);
         if (json is null) return null;
         try
@@ -72,12 +72,22 @@ public sealed class FfmpegProbe : IMediaProbe
                 return null;
             }
 
+            var bitRate = format.ValueKind == JsonValueKind.Object && format.TryGetProperty("bit_rate", out var br) &&
+                          long.TryParse(br.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var brv) ? brv : 0;
+            int width = 0, height = 0;
             var subs = new List<SubtitleStream>();
             if (root.TryGetProperty("streams", out var streams))
             {
                 var n = 0;
                 foreach (var s in streams.EnumerateArray())
                 {
+                    if (s.TryGetProperty("codec_type", out var vt) && vt.GetString() == "video" &&
+                        !(s.TryGetProperty("disposition", out var disp) && disp.TryGetProperty("attached_pic", out var ap) && ap.GetInt32() == 1) &&
+                        s.TryGetProperty("height", out var hEl) && hEl.TryGetInt32(out var h) && h > height)
+                    {
+                        height = h;
+                        width = s.TryGetProperty("width", out var wEl) && wEl.TryGetInt32(out var w) ? w : 0;
+                    }
                     if (s.TryGetProperty("codec_type", out var ctp) && ctp.GetString() == "subtitle")
                     {
                         var lang = s.TryGetProperty("tags", out var st) && st.TryGetProperty("language", out var l) ? l.GetString() : null;
@@ -89,7 +99,7 @@ public sealed class FfmpegProbe : IMediaProbe
             if (format.ValueKind == JsonValueKind.Object && format.TryGetProperty("tags", out var allTags))
                 foreach (var t in allTags.EnumerateObject())
                     if (t.Value.ValueKind == JsonValueKind.String) all[t.Name] = t.Value.GetString()!;
-            return new MediaInfo(duration, Tag("title"), Tag("artist", "uploader", "album_artist"), subs, all);
+            return new MediaInfo(duration, Tag("title"), Tag("artist", "uploader", "album_artist"), subs, all, width, height, bitRate);
         }
         catch (JsonException)
         {

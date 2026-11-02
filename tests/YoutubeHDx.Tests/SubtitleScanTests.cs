@@ -25,12 +25,14 @@ internal sealed class FakeProbe : IMediaProbe
 {
     public Dictionary<string, MediaInfo> Media { get; } = new();
     public Dictionary<string, string> Embedded { get; } = new();
-    public int Probes { get; private set; }
+    private int _probes;
+    public int Probes => _probes;
 
+    /// <summary>Looked up by full path first, then by file name.</summary>
     public Task<MediaInfo?> ProbeAsync(string path, CancellationToken ct)
     {
-        Probes++;
-        return Task.FromResult(Media.TryGetValue(Path.GetFileName(path), out var m) ? m : null);
+        Interlocked.Increment(ref _probes);
+        return Task.FromResult(Media.TryGetValue(path, out var full) ? full : Media.TryGetValue(Path.GetFileName(path), out var m) ? m : null);
     }
 
     public Task<string?> ExtractSubtitleAsync(string path, int i, CancellationToken ct) =>

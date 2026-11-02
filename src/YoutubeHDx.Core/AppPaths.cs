@@ -31,6 +31,9 @@ public static class AppPaths
     /// <summary>Videos already written to the unavailable-videos CSV (so each is listed once).</summary>
     public static string UnavailableStateFile => Path.Combine(DataDir, "unavailable-reported.json");
 
+    /// <summary>Duplicate check: cached file facts, your decisions (un-ignore, same/different) and the last results.</summary>
+    public static string DuplicateStateFile => Path.Combine(DataDir, "duplicates.json");
+
     /// <summary>
     /// Per-user pipe name; the pipe is also created with CurrentUserOnly. When the data folder is overridden
     /// (tests), the name includes a hash of that folder so it can never reach the real running app.
