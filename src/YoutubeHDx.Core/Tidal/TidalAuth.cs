@@ -42,21 +42,68 @@ public static class TidalAuth
         "&code_challenge_method=S256&code_challenge=" + pkce.Challenge +
         "&state=" + pkce.State;
 
-    /// <summary>Opens TIDAL's sign-in page (via <paramref name="openBrowser"/>) and waits for the redirect with the code.</summary>
-    public static async Task<TidalTokens> SignInAsync(HttpClient http, string clientId, Action<string> openBrowser, CancellationToken ct)
+    /// <summary>
+    /// Opens TIDAL's sign-in page (via <paramref name="openBrowser"/>) and waits for TIDAL's redirect to
+    /// http://localhost:51735/tidal-callback. Some browsers (like the Claude desktop app's built-in one) won't open
+    /// localhost: then the address that failed to open can be pasted instead (<paramref name="pastedRedirect"/>).
+    /// </summary>
+    public static async Task<TidalTokens> SignInAsync(HttpClient http, string clientId, Action<string> openBrowser, CancellationToken ct,
+        Func<CancellationToken, Task<string?>>? pastedRedirect = null)
     {
         var pkce = NewPkce();
-        using var listener = new TcpListener(IPAddress.Loopback, CallbackPort);
-        listener.Start();
-        openBrowser(BuildAuthorizeUrl(clientId, pkce));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        timeout.CancelAfter(TimeSpan.FromMinutes(15));
+        var listeners = new List<TcpListener>();
+        foreach (var address in new[] { IPAddress.Loopback, IPAddress.IPv6Loopback })
+        {
+            try { var l = new TcpListener(address, CallbackPort); l.Start(); listeners.Add(l); }
+            catch (SocketException) { /* no IPv6, or the port is taken on one of them */ }
+        }
+        if (listeners.Count == 0 && pastedRedirect is null)
+            throw new InvalidOperationException($"Port {CallbackPort} is in use; close whatever uses it and try again.");
 
+        try
+        {
+            openBrowser(BuildAuthorizeUrl(clientId, pkce));
+            var waits = listeners.Select(l => WaitForCallbackAsync(l, pkce.State, timeout.Token)).ToList();
+            if (pastedRedirect is not null)
+                waits.Add(Task.Run(async () =>
+                {
+                    var url = await pastedRedirect(timeout.Token).ConfigureAwait(false) ?? "";
+                    var q = ParseQuery(url.Contains('?') ? url[(url.IndexOf('?') + 1)..] : url);
+                    if (q.GetValueOrDefault("state") == pkce.State && (q.ContainsKey("code") || q.ContainsKey("error"))) return q;
+                    await Task.Delay(Timeout.Infinite, timeout.Token).ConfigureAwait(false); // not a valid redirect: keep waiting for the real one
+                    return q;
+                }, timeout.Token));
+
+            var first = await Task.WhenAny(waits).ConfigureAwait(false);
+            var query = await first.ConfigureAwait(false);
+            if (query.TryGetValue("error", out var error))
+                throw new InvalidOperationException("TIDAL sign-in was not completed: " + (query.GetValueOrDefault("error_description") ?? error));
+            var tokens = await ExchangeAsync(http, clientId, new Dictionary<string, string>
+            {
+                ["grant_type"] = "authorization_code",
+                ["code"] = query["code"],
+                ["redirect_uri"] = RedirectUri,
+                ["code_verifier"] = pkce.Verifier,
+            }, null, ct).ConfigureAwait(false);
+            Save(tokens);
+            return tokens;
+        }
+        finally
+        {
+            timeout.Cancel();
+            foreach (var l in listeners) l.Stop();
+        }
+    }
+
+    private static async Task<Dictionary<string, string>> WaitForCallbackAsync(TcpListener listener, string state, CancellationToken ct)
+    {
         while (true)
         {
-            using var client = await listener.AcceptTcpClientAsync(timeout.Token).ConfigureAwait(false);
+            using var client = await listener.AcceptTcpClientAsync(ct).ConfigureAwait(false);
             await using var stream = client.GetStream();
-            var requestLine = await ReadRequestLineAsync(stream, timeout.Token).ConfigureAwait(false);
+            var requestLine = await ReadRequestLineAsync(stream, ct).ConfigureAwait(false);
             var target = requestLine.Split(' ') is { Length: >= 2 } p ? p[1] : "";
             if (!target.StartsWith("/tidal-callback", StringComparison.Ordinal))
             {
@@ -64,27 +111,15 @@ public static class TidalAuth
                 continue;
             }
             var query = ParseQuery(target.Contains('?') ? target[(target.IndexOf('?') + 1)..] : "");
-            if (query.GetValueOrDefault("state") != pkce.State)
+            if (query.GetValueOrDefault("state") != state)
             {
                 await RespondAsync(stream, 400, "This sign-in link is out of date. Start the TIDAL sign-in again from YoutubeHDx.").ConfigureAwait(false);
                 continue;
             }
-            if (query.TryGetValue("error", out var error))
-            {
-                await RespondAsync(stream, 200, "TIDAL sign-in was not completed (" + error + "). You can close this tab.").ConfigureAwait(false);
-                throw new InvalidOperationException("TIDAL sign-in was not completed: " + (query.GetValueOrDefault("error_description") ?? error));
-            }
-            var code = query.GetValueOrDefault("code") ?? throw new InvalidOperationException("TIDAL did not send a sign-in code.");
-            var tokens = await ExchangeAsync(http, clientId, new Dictionary<string, string>
-            {
-                ["grant_type"] = "authorization_code",
-                ["code"] = code,
-                ["redirect_uri"] = RedirectUri,
-                ["code_verifier"] = pkce.Verifier,
-            }, null, ct).ConfigureAwait(false);
-            await RespondAsync(stream, 200, "Signed in to TIDAL. You can close this tab and go back to YoutubeHDx.").ConfigureAwait(false);
-            Save(tokens);
-            return tokens;
+            await RespondAsync(stream, 200, query.ContainsKey("error")
+                ? "TIDAL sign-in was not completed. You can close this tab."
+                : "Signed in to TIDAL. You can close this tab and go back to YoutubeHDx.").ConfigureAwait(false);
+            return query;
         }
     }
 

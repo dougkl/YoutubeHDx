@@ -230,7 +230,17 @@ internal sealed class TrayContext : ApplicationContext
             {
                 if (!interactive) return;
                 _ui.Post(_ => _tray.ShowBalloonTip(5000, "YoutubeHDx", "Sign in to TIDAL in the browser window that opens, and allow access.", ToolTipIcon.Info), null);
-                await TidalAuth.SignInAsync(Http, s.TidalClientId, url => Open(url), _stop.Token);
+                // If the browser can't open the localhost page TIDAL sends it to, the address it shows can be pasted.
+                var pasted = new TaskCompletionSource<string?>();
+                var signIn = TidalAuth.SignInAsync(Http, s.TidalClientId, url => Open(url), _stop.Token, _ => pasted.Task);
+                _ui.Post(_ =>
+                {
+                    if (signIn.IsCompleted) return;
+                    var url = Prompt.Ask("TIDAL sign-in",
+                        "After allowing access, if the browser can't open the localhost page, paste its address here (otherwise just close this).");
+                    if (!string.IsNullOrWhiteSpace(url)) pasted.TrySetResult(url);
+                }, null);
+                await signIn;
             }
 
             if (_duplicates.Results.ScannedAt is null) await _duplicates.ScanAsync(_stop.Token, preview: !s.DuplicateCheck);

@@ -113,6 +113,43 @@ internal static class TidalTests
     }
 
     [Test]
+    public static async Task SignInWorksThroughTheLocalhostRedirectAndThroughAPastedAddress()
+    {
+        TestEnv.UseFakeYtDlp("ok");
+        var forms = new List<string>();
+        var http = new HttpClient(new FakeHttp(r =>
+        {
+            forms.Add(r.Content!.ReadAsStringAsync().Result);
+            return FakeHttp.Json("""{"access_token":"A","refresh_token":"R","expires_in":3600,"user_id":175}""");
+        }));
+
+        // 1. The browser follows the redirect to the app's localhost page.
+        var t = await TidalAuth.SignInAsync(http, "cid", url =>
+        {
+            var state = TidalAuth.ParseQuery(url[(url.IndexOf('?') + 1)..])["state"];
+            _ = Task.Run(async () =>
+            {
+                using var c = new System.Net.Sockets.TcpClient();
+                await c.ConnectAsync(System.Net.IPAddress.Loopback, TidalAuth.CallbackPort);
+                var s = c.GetStream();
+                await s.WriteAsync(Encoding.ASCII.GetBytes($"GET /tidal-callback?code=C1&state={state} HTTP/1.1\r\nHost: localhost\r\n\r\n"));
+                await new StreamReader(s).ReadToEndAsync();
+            });
+        }, CancellationToken.None);
+        Assert.Equal("A", t.AccessToken);
+        Assert.Contains("code=C1", forms[^1]);
+        Assert.Contains("code_verifier=", forms[^1]);
+        Assert.Equal("A", TidalAuth.Load()!.AccessToken);
+
+        // 2. The browser can't open localhost; you paste the address it shows.
+        string? state2 = null;
+        t = await TidalAuth.SignInAsync(http, "cid", url => state2 = TidalAuth.ParseQuery(url[(url.IndexOf('?') + 1)..])["state"],
+            CancellationToken.None, async ct => { while (state2 is null) await Task.Delay(10, ct); return $"http://localhost:51735/tidal-callback?code=C2&state={state2}"; });
+        Assert.Contains("code=C2", forms[^1]);
+        TidalAuth.SignOut();
+    }
+
+    [Test]
     public static void OnlyTheSameRecordingAtTheSameLengthIsPicked()
     {
         var video = SongKey.Parse("The Beatles - Let It Be (Official Music Video)");
