@@ -34,11 +34,11 @@ public static class TidalAuth
         return new Pkce(verifier, B64(SHA256.HashData(Encoding.ASCII.GetBytes(verifier))), B64(RandomNumberGenerator.GetBytes(16)));
     }
 
-    public static string BuildAuthorizeUrl(string clientId, Pkce pkce) =>
+    public static string BuildAuthorizeUrl(string clientId, Pkce pkce, string? scopes = null) =>
         AuthorizeUrl + "?response_type=code" +
         "&client_id=" + Uri.EscapeDataString(clientId) +
         "&redirect_uri=" + Uri.EscapeDataString(RedirectUri) +
-        "&scope=" + Uri.EscapeDataString(Scopes) +
+        "&scope=" + Uri.EscapeDataString(scopes ?? Scopes) +
         "&code_challenge_method=S256&code_challenge=" + pkce.Challenge +
         "&state=" + pkce.State;
 
@@ -48,7 +48,7 @@ public static class TidalAuth
     /// localhost: then the address that failed to open can be pasted instead (<paramref name="pastedRedirect"/>).
     /// </summary>
     public static async Task<TidalTokens> SignInAsync(HttpClient http, string clientId, Action<string> openBrowser, CancellationToken ct,
-        Func<CancellationToken, Task<string?>>? pastedRedirect = null)
+        Func<CancellationToken, Task<string?>>? pastedRedirect = null, string? scopes = null)
     {
         var pkce = NewPkce();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -64,7 +64,7 @@ public static class TidalAuth
 
         try
         {
-            openBrowser(BuildAuthorizeUrl(clientId, pkce));
+            openBrowser(BuildAuthorizeUrl(clientId, pkce, scopes));
             var waits = listeners.Select(l => WaitForCallbackAsync(l, pkce.State, timeout.Token)).ToList();
             if (pastedRedirect is not null)
                 waits.Add(Task.Run(async () =>
