@@ -249,7 +249,7 @@ describe('service worker: TIDAL', () => {
   test('audio commands: opens the offscreen player once and forwards to it, for one tab at a time', async () => {
     const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
     await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 3 }, { tab: { id: 5 } });
-    await new Promise((r) => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 20)); // the offscreen page says "ready" before commands go to it
     assert.equal(bg.offscreen.created.length, 1);
     assert.deepEqual([...bg.offscreen.created[0].reasons], ['AUDIO_PLAYBACK']);
     assert.equal(bg.sentToRuntime.at(-1).target, 'offscreen');
@@ -261,6 +261,39 @@ describe('service worker: TIDAL', () => {
     await new Promise((r) => setTimeout(r, 0));
     assert.equal(bg.sentToTabs.at(-1)[0], 5);
     assert.equal(bg.sentToTabs.at(-1)[1].status, 'taken');
+  });
+
+  test('after a long pause (Chrome closed the TIDAL page) playing again reopens it where the video is', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 3 }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    bg.offscreen.open = false; // closed by Chrome while paused
+    const before = bg.sentToRuntime.length;
+    await bg.send({ type: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: 95.5, playing: false }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(bg.offscreen.created.length, 1, 'still paused: nothing to play yet');
+    await bg.send({ type: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: 96, playing: true }, { tab: { id: 5 } });
+    await bg.send({ type: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: 96.25, playing: true }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(bg.offscreen.created.length, 2);
+    const sent = bg.sentToRuntime.slice(before);
+    const loads = sent.filter((m) => m.cmd === 'load');
+    assert.equal(loads.length, 1);
+    assert.equal(loads[0].trackId, '9');
+    assert.equal(loads[0].at, 96);
+    assert.equal(loads[0].target, 'offscreen');
+    assert.ok(sent.filter((m) => m.cmd === 'clock').length >= 1, 'the clock follows the load');
+  });
+
+  test('remembers the playing tab when Chrome restarts the idle service worker', async () => {
+    const first = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    await first.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 3 }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    const restarted = loadPlayerBackground({ fetchFn: fetchFn([]), session: first.session });
+    restarted.offscreen.open = true;
+    await restarted.send({ type: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: 10, playing: true }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(restarted.sentToRuntime.filter((m) => m.cmd === 'clock' && m.tabId === 5).length, 1);
   });
 
   test('gives the offscreen player its credentials', async () => {

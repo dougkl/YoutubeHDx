@@ -10,14 +10,14 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cd "$work"
 npm init -y >/dev/null
-npm install --silent "@tidal-music/player@$ver" esbuild >/dev/null
+npm install --silent "@tidal-music/player@$ver" "@tidal-music/event-producer@${EVENT_PRODUCER_VERSION:-2.6.0}" esbuild >/dev/null
 cp "$here/extension-player/src/offscreen-src.js" entry.js
 rm -rf "$here/extension-player/tidal-player" "$here/extension-player/offscreen.js"
 npx esbuild entry.js --bundle --format=esm --splitting --target=chrome111 --minify \
   --outdir="$here/extension-player" --entry-names=offscreen --chunk-names='tidal-player/[name]-[hash]' \
   --legal-comments=none --log-level=warning
 {
-  echo "TIDAL web player SDK (@tidal-music/player $ver and its @tidal-music/* dependencies)"
+  echo "TIDAL web player SDK (@tidal-music/player $ver, @tidal-music/event-producer and their @tidal-music/* dependencies)"
   echo "Copyright TIDAL Music AS. Licensed under the Apache License, Version 2.0:"
   echo "https://www.apache.org/licenses/LICENSE-2.0  -  source: https://github.com/tidal-music/tidal-sdk-web"
   echo

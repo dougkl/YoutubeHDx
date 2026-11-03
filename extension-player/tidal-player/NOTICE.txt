@@ -1,4 +1,4 @@
-TIDAL web player SDK (@tidal-music/player 0.20.1 and its @tidal-music/* dependencies)
+TIDAL web player SDK (@tidal-music/player 0.20.1, @tidal-music/event-producer and their @tidal-music/* dependencies)
 Copyright TIDAL Music AS. Licensed under the Apache License, Version 2.0:
 https://www.apache.org/licenses/LICENSE-2.0  -  source: https://github.com/tidal-music/tidal-sdk-web
 

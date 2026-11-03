@@ -50,6 +50,16 @@ const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
 const TIDAL_SCOPES = 'search.read playback user.read';
 const TIDAL_MATCH_TTL = { found: 30 * DAY, notFound: 7 * DAY };
 let tidalAudioTab = null; // the tab whose video TIDAL is playing for
+// Chrome stops this service worker when it's idle (e.g. a long pause), which would forget the tab: keep it in session storage.
+const audioTabStore = chrome.storage.session;
+async function audioTab() {
+  if (tidalAudioTab == null && audioTabStore) tidalAudioTab = (await audioTabStore.get({ tidalAudioTab: null }).catch(() => ({}))).tidalAudioTab ?? null;
+  return tidalAudioTab;
+}
+function setAudioTab(tabId) {
+  tidalAudioTab = tabId;
+  audioTabStore?.set({ tidalAudioTab: tabId }).catch(() => {});
+}
 
 /** Client ID: from the install pack (tidal-config.json, made by build-pack from your downloader settings) or the options page. */
 async function tidalClientId() {
@@ -109,29 +119,48 @@ async function tidalMatch(msg) {
   return result;
 }
 
+let offscreenReady = null; // resolves when the offscreen page has loaded TIDAL's player and listens for commands
+
 async function ensureOffscreen() {
-  if (await chrome.offscreen.hasDocument?.()) return;
+  if (await chrome.offscreen.hasDocument?.()) { await offscreenReady?.promise; return; }
+  let resolve;
+  const promise = new Promise((r) => { resolve = r; });
+  offscreenReady = { promise, resolve };
   try {
     await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['AUDIO_PLAYBACK'], justification: 'Plays the TIDAL version of the song in step with the YouTube music video' });
   } catch (e) {
     if (!String(e?.message || e).includes('single offscreen')) throw e;
   }
+  // Commands sent before the page's script runs would be lost: wait for its "ready" (at most 10 s).
+  await Promise.race([promise, new Promise((r) => setTimeout(r, 10000))]);
 }
+
+let tidalReopening = null;
 
 async function tidalAudio(msg, tabId) {
   if (msg.cmd === 'load') {
-    if (tidalAudioTab != null && tidalAudioTab !== tabId) chrome.tabs.sendMessage(tidalAudioTab, { type: 'tidal-audio-status', status: 'taken' }).catch(() => {});
-    tidalAudioTab = tabId;
+    const previous = await audioTab();
+    if (previous != null && previous !== tabId) chrome.tabs.sendMessage(previous, { type: 'tidal-audio-status', status: 'taken' }).catch(() => {});
+    setAudioTab(tabId);
     await ensureOffscreen();
-  } else if (tabId !== tidalAudioTab) {
+  } else if (tabId !== (await audioTab())) {
     return; // another tab's leftovers
+  } else if (msg.cmd === 'clock' && msg.playing && !(await chrome.offscreen.hasDocument?.())) {
+    // Chrome closes the TIDAL page ~30 s after its sound stops (a long pause): open it again where the video is.
+    if (!tidalReopening) {
+      tidalReopening = ensureOffscreen()
+        .then(() => chrome.runtime.sendMessage({ type: 'tidal-audio', cmd: 'load', trackId: msg.trackId, at: msg.videoTime, target: 'offscreen', tabId }))
+        .catch(() => {})
+        .finally(() => { tidalReopening = null; });
+    }
+    await tidalReopening;
   }
   if (!(await chrome.offscreen.hasDocument?.())) return;
   await chrome.runtime.sendMessage({ ...msg, target: 'offscreen', tabId }).catch(() => {});
-  if (msg.cmd === 'stop') tidalAudioTab = null;
+  if (msg.cmd === 'stop') setAudioTab(null);
 }
 
-chrome.tabs?.onRemoved?.addListener((tabId) => { if (tabId === tidalAudioTab) tidalAudio({ cmd: 'stop' }, tabId); });
+chrome.tabs?.onRemoved?.addListener(async (tabId) => { if (tabId === (await audioTab())) tidalAudio({ cmd: 'stop' }, tabId); });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg?.type) {
@@ -157,6 +186,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
+      return false;
+    case 'tidal-offscreen-ready':
+      offscreenReady?.resolve();
       return false;
     case 'tidal-audio-status':
       // From the offscreen player: pass to the tab it plays for.

@@ -266,7 +266,7 @@ export function loadLyrics() {
 }
 
 /** Player background.js with lyrics.js (importScripts) and fake chrome storage + fetch. */
-export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () => Date.now() } = {}) {
+export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () => Date.now(), session = {} } = {}) {
   const local = { openSubtitlesKey };
   const onMessage = [];
   const sentToRuntime = [];
@@ -280,7 +280,11 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       sendMessage: async (m) => { sentToRuntime.push(m); },
     },
     tabs: { sendMessage: async (id, m) => { sentToTabs.push([id, m]); }, onRemoved: { addListener: () => {} } },
-    offscreen: { hasDocument: async () => offscreen.open, createDocument: async (o) => { offscreen.open = true; offscreen.created.push(o); } },
+    offscreen: {
+      hasDocument: async () => offscreen.open,
+      // the page loads and says it's ready, like the real offscreen.js
+      createDocument: async (o) => { offscreen.open = true; offscreen.created.push(o); setTimeout(() => dispatch({ type: 'tidal-offscreen-ready' }), 0); },
+    },
     identity: { getRedirectURL: (p) => `https://test.chromiumapp.org/${p}`, launchWebAuthFlow: async (o) => identity(o) },
     storage: {
       local: {
@@ -293,13 +297,17 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
         set: async (obj) => Object.assign(local, obj),
         remove: async (k) => { for (const key of [].concat(k)) delete local[key]; },
       },
+      session: {
+        get: async (q) => { const out = { ...q }; for (const k of Object.keys(q)) if (k in session) out[k] = session[k]; return out; },
+        set: async (obj) => Object.assign(session, obj),
+      },
     },
   };
   const offscreen = { open: false, created: [] };
   let identity = async () => { throw new Error('no sign-in in this test'); };
   const ctx = vm.createContext({
     chrome, URL, URLSearchParams, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
-    Date: { now }, TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise,
+    Date: { now }, TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise, setTimeout, clearTimeout,
   });
   ctx.importScripts = (name) => vm.runInContext(playerSource(name), ctx);
   vm.runInContext(playerSource('background.js'), ctx);
@@ -310,6 +318,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
   });
   return {
     local,
+    session,
     offscreen,
     sentToRuntime,
     sentToTabs,
