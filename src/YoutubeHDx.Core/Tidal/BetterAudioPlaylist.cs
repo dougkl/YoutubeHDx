@@ -78,6 +78,17 @@ public sealed partial class BetterAudioPlaylist
         try
         {
             var fresh = false;
+            string? existing = null;
+            if (state.PlaylistId is null)
+            {
+                try { existing = await _api.FindOwnPlaylistAsync(PlaylistName, ct).ConfigureAwait(false); }
+                catch (TidalApiException e) { _log($"TIDAL: couldn't list your playlists ({e.Message}); a new one will be made"); }
+            }
+            if (existing is not null)
+            {
+                state.PlaylistId = existing; // made on another PC (or before a reinstall): keep using it
+                _log($"TIDAL: using your existing playlist {existing}");
+            }
             if (state.PlaylistId is null || !await _api.PlaylistExistsAsync(state.PlaylistId, ct).ConfigureAwait(false))
             {
                 state.PlaylistId = await _api.CreatePlaylistAsync(PlaylistName,

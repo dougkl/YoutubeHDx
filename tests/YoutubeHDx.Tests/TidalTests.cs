@@ -18,6 +18,7 @@ internal sealed class FakeTidal : HttpMessageHandler
     public List<string> Bodies { get; } = new();
     public int Playlists { get; private set; }
     public bool PlaylistGone { get; set; }
+    public string? ExistingPlaylist { get; set; }
 
     private IEnumerable<Track> All => Search.Values.SelectMany(x => x);
 
@@ -57,6 +58,8 @@ internal sealed class FakeTidal : HttpMessageHandler
             Playlists++;
             return Json(new { data = new { id = "pl-" + Playlists, type = "playlists" } }, HttpStatusCode.Created);
         }
+        if (req.Method == HttpMethod.Get && url.StartsWith("/v2/playlists?"))
+            return Json(new { data = ExistingPlaylist is null ? [] : new[] { new { id = ExistingPlaylist, type = "playlists", attributes = new { name = BetterAudioPlaylist.PlaylistName } } }, links = new { self = "x" } });
         if (req.Method == HttpMethod.Get && url.StartsWith("/v2/playlists/") && !url.Contains("/relationships/"))
             return PlaylistGone ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{}") } : Json(new { data = new { id = "x" } });
         if (req.Method == HttpMethod.Post && url.Contains("/relationships/items"))
@@ -248,6 +251,17 @@ internal static class TidalTests
         s = await builder.RunAsync(videos, CancellationToken.None);
         Assert.Equal(0, s.Added);
         Assert.Equal(0, fake.Added.Count);
+    }
+
+    [Test]
+    public static async Task ASecondPcReusesTheSamePlaylist()
+    {
+        var (builder, fake, nas) = Make();
+        fake.ExistingPlaylist = "made-elsewhere";
+        fake.Search["Pink Floyd Learning To Fly"] = [new("100", "Learning To Fly", null, "PT4M53S", ["Pink Floyd"])];
+        await builder.RunAsync([Video(nas, "Pink Floyd - Learning To Fly.mkv", 292.4)], CancellationToken.None);
+        Assert.Equal(0, fake.Playlists);
+        Assert.True(fake.Requests.Any(r => r.Contains("/playlists/made-elsewhere/relationships/items")));
     }
 
     [Test]

@@ -86,6 +86,23 @@ public sealed class TidalApi
         return doc.RootElement.GetProperty("data").GetProperty("id").GetString()!;
     }
 
+    /// <summary>Your playlist with this name, if there is one (so a second PC reuses it instead of making another).</summary>
+    public async Task<string?> FindOwnPlaylistAsync(string name, CancellationToken ct)
+    {
+        string? path = $"/playlists?filter[owners.id]=me&countryCode={_country}";
+        for (var page = 0; path is not null && page < 20; page++)
+        {
+            using var doc = await SendAsync(HttpMethod.Get, path, null, ct).ConfigureAwait(false);
+            foreach (var p in Items(doc.RootElement, "data"))
+                if (Attr(p, "name") == name) return p.GetProperty("id").GetString();
+            path = doc.RootElement.TryGetProperty("links", out var links) && links.TryGetProperty("next", out var next) &&
+                   next.GetString() is { Length: > 0 } n
+                ? (n.StartsWith("http", StringComparison.Ordinal) ? n[BaseUrl.Length..] : n)
+                : null;
+        }
+        return null;
+    }
+
     /// <summary>True if the playlist still exists (you may have deleted it in TIDAL).</summary>
     public async Task<bool> PlaylistExistsAsync(string id, CancellationToken ct)
     {
