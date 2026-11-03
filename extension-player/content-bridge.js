@@ -66,7 +66,7 @@
     let result;
     try { result = await chrome.runtime.sendMessage(msg); } catch { result = null; }
     window.postMessage({ __yhdx: 'tidal-match', videoId: msg.videoId, track: result?.track ?? null,
-      reason: result?.reason ?? null, signedOut: !!result?.signedOut }, location.origin);
+      reason: result?.reason ?? null, signedOut: !!result?.signedOut, previewOnly: !!result?.previewOnly }, location.origin);
   }
 
   const AUDIO_CMDS = new Set(['load', 'clock', 'stop']);
@@ -83,7 +83,7 @@
     if (msg?.type !== 'tidal-audio-status') return false;
     window.postMessage({ __yhdx: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null,
       quality: msg.quality ?? null, bitDepth: msg.bitDepth ?? null, sampleRate: msg.sampleRate ?? null,
-      message: msg.message ?? null }, location.origin);
+      message: msg.message ?? null, known: !!msg.known }, location.origin);
     return false;
   });
 

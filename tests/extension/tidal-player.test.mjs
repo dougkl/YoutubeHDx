@@ -149,6 +149,20 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 1);
   });
 
+  test('previews only, already known (from another day or tab): quietly keeps YouTube sound', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { previewOnly: true, reason: 'TIDAL plays previews only for this app' });
+    assert.equal(audioMsgs(page, 'load').length, 0);
+    assert.equal(page.player.video.muted, false);
+    assert.equal(page.toastText(), undefined);
+    const again = watch();
+    again.sendTidalMatch('vid1', TRACK);
+    again.sendAudioStatus('loaded', { trackId: TRACK.id });
+    again.sendAudioStatus('preview', { trackId: TRACK.id, known: true }); // the daily re-check: still previews
+    assert.equal(again.player.video.muted, false);
+    assert.equal(again.toastText(), undefined);
+  });
+
   test('another video: TIDAL stops and YouTube sound comes back', () => {
     const page = playingTidal();
     page.player.videoId = 'vid2';
@@ -294,6 +308,30 @@ describe('service worker: TIDAL', () => {
     await restarted.send({ type: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: 10, playing: true }, { tab: { id: 5 } });
     await new Promise((r) => setTimeout(r, 10));
     assert.equal(restarted.sentToRuntime.filter((m) => m.cmd === 'clock' && m.tabId === 5).length, 1);
+  });
+
+  test('previews only: remembered for every tab, looked at again after a day, cleared when full tracks play', async () => {
+    let now = Date.now();
+    const calls = [];
+    const bg = loadPlayerBackground({ fetchFn: async (u) => { calls.push(u); return new Response('{"data":[]}'); }, now: () => now });
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: now + 3600e3, userId: '175' };
+    await bg.send({ type: 'tidal-audio-status', status: 'preview', tabId: 5, trackId: '9', reason: 'FULL_REQUIRES_HIGHER_ACCESS_TIER' });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(bg.sentToTabs.at(-1)[1].known, false, 'first time: the tab tells you');
+    const r = await bg.send({ type: 'tidal-match', videoId: 'abcdef123', title: 'A - B', author: 'A', duration: 200 });
+    assert.equal(r.previewOnly, true);
+    assert.equal(calls.length, 0, 'no TIDAL search while previews only');
+    assert.equal((await bg.send({ type: 'tidal-status' })).previewOnly, true);
+    await bg.send({ type: 'tidal-audio-status', status: 'preview', tabId: 5, trackId: '9' });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(bg.sentToTabs.at(-1)[1].known, true, 'already known: no second message');
+    bg.local.tidalPreviewOnly.at -= 25 * 3600e3; // a day later: try again
+    const later = await bg.send({ type: 'tidal-match', videoId: 'abcdef124', title: 'A - B', author: 'A', duration: 200 });
+    assert.notEqual(later.previewOnly, true);
+    assert.ok(calls.length > 0);
+    await bg.send({ type: 'tidal-audio-status', status: 'playing', tabId: 5, trackId: '9' });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(bg.local.tidalPreviewOnly, undefined, 'full tracks play: forget it');
   });
 
   test('gives the offscreen player its credentials', async () => {

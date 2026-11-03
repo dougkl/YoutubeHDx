@@ -404,6 +404,7 @@
     if (data.videoId !== audio.videoId || data.videoId !== p?.getVideoData?.()?.video_id || audio.status !== 'finding') return;
     if (!data.track) {
       audio.status = 'none';
+      if (data.previewOnly) audio.previewOnly = true;
       if (data.signedOut && !audio.signInHintShown) {
         audio.signInHintShown = true;
         toast('TIDAL audio: sign in to TIDAL in the YoutubeHDx Player settings');
@@ -440,7 +441,7 @@
       case 'preview':
         audio.previewOnly = true; // TIDAL only gives this app previews: don't try again on every video
         audioStop();
-        toast('TIDAL only plays previews for this app, so the video keeps YouTube\'s sound');
+        if (!data.known) toast('TIDAL only plays previews for this app, so the video keeps YouTube\'s sound');
         break;
       case 'revoked':
         audioStop();

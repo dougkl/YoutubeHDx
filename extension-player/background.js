@@ -91,6 +91,7 @@ async function tidalSignIn() {
   if (!q.get('code')) throw new Error(`TIDAL sign-in was not completed (${q.get('error') || 'no code'})`);
   const auth = await tidalExchange({ grant_type: 'authorization_code', code: q.get('code'), redirect_uri: redirectUri, code_verifier: pkce.verifier });
   await chrome.storage.local.set({ tidalAuth: auth });
+  await chrome.storage.local.remove('tidalPreviewOnly'); // a new sign-in may come with full access
   return { signedIn: true };
 }
 
@@ -104,6 +105,8 @@ async function tidalToken() {
   return fresh;
 }
 
+const TIDAL_PREVIEW_RECHECK = 24 * 3600e3;
+
 async function tidalMatch(msg) {
   if (!/^[\w-]{6,20}$/.test(String(msg.videoId || ''))) return { track: null, reason: 'bad video id' };
   const exclude = (Array.isArray(msg.exclude) ? msg.exclude : []).map(String).slice(0, 20);
@@ -112,11 +115,24 @@ async function tidalMatch(msg) {
   if (hit && Date.now() - hit.at < hit.ttl && !exclude.length) return hit.result;
   const auth = await tidalToken();
   if (!auth) return { track: null, reason: 'not signed in to TIDAL', signedOut: true };
+  // TIDAL gives this app 30-second previews only: don't try on every video; look again once a day.
+  const { tidalPreviewOnly } = await chrome.storage.local.get({ tidalPreviewOnly: null });
+  if (tidalPreviewOnly && Date.now() - tidalPreviewOnly.at < TIDAL_PREVIEW_RECHECK) return { track: null, reason: 'TIDAL plays previews only for this app', previewOnly: true };
   const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
   const result = await yhdxTidalFind({ title: msg.title, author: msg.author, duration: Number(msg.duration) },
     { fetchFn: (url, init) => fetch(url, init), token: auth.access, country: tidalCountry, exclude });
   if (!exclude.length) await chrome.storage.local.set({ [key]: { at: Date.now(), ttl: result.track ? TIDAL_MATCH_TTL.found : TIDAL_MATCH_TTL.notFound, result } });
   return result;
+}
+
+async function notePreview(msg) {
+  if (msg.status === 'preview') {
+    const { tidalPreviewOnly } = await chrome.storage.local.get({ tidalPreviewOnly: null });
+    await chrome.storage.local.set({ tidalPreviewOnly: { at: Date.now(), reason: String(msg.reason || '') } });
+    return { ...msg, known: !!tidalPreviewOnly }; // the daily re-check: no need to say it again
+  }
+  if (msg.status === 'playing') await chrome.storage.local.remove('tidalPreviewOnly');
+  return msg;
 }
 
 let offscreenReady = null; // resolves when the offscreen page has loaded TIDAL's player and listens for commands
@@ -178,8 +194,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       chrome.storage.local.remove('tidalAuth').then(() => sendResponse({ ok: true }));
       return true;
     case 'tidal-status':
-      Promise.all([chrome.storage.local.get({ tidalAuth: null }), tidalClientId()]).then(([s, clientId]) =>
-        sendResponse({ signedIn: !!s.tidalAuth?.refresh, clientId, redirectUri: chrome.identity.getRedirectURL('tidal') }));
+      Promise.all([chrome.storage.local.get({ tidalAuth: null, tidalPreviewOnly: null }), tidalClientId()]).then(([s, clientId]) =>
+        sendResponse({ signedIn: !!s.tidalAuth?.refresh, clientId, redirectUri: chrome.identity.getRedirectURL('tidal'), previewOnly: !!s.tidalPreviewOnly }));
       return true;
     case 'tidal-match':
       tidalMatch(msg).then(sendResponse, (e) => sendResponse({ track: null, reason: String(e?.message || e), retryable: true, signedOut: e?.status === 401 }));
@@ -191,8 +207,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       offscreenReady?.resolve();
       return false;
     case 'tidal-audio-status':
-      // From the offscreen player: pass to the tab it plays for.
-      if (msg.tabId != null) chrome.tabs.sendMessage(msg.tabId, msg).catch(() => {});
+      // From the offscreen player: pass to the tab it plays for (remembering "previews only" for every tab).
+      notePreview(msg).then((m) => { if (m.tabId != null) chrome.tabs.sendMessage(m.tabId, m).catch(() => {}); });
       return false;
     default:
       return false;
