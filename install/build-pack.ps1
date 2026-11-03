@@ -43,7 +43,8 @@ Copy-Item (Join-Path $PSScriptRoot 'pack\README.txt') $pack
 # Seed settings for the server: portable values only (no tool paths, temp folder or login).
 $portable = 'nasPath', 'maxHeight', 'subtitleLanguages', 'embedSubtitles', 'keepSubtitleFiles', 'outputTemplate',
             'extraArgs', 'maxConcurrentDownloads', 'requireLogin', 'watchedPlaylists', 'watchIntervalMinutes',
-            'writeInfoFiles', 'fixDatedFileNames', 'duplicateCheck', 'duplicateFolders', 'duplicateSkipFolders'
+            'writeInfoFiles', 'fixDatedFileNames', 'duplicateCheck', 'duplicateFolders', 'duplicateSkipFolders',
+            'tidalClientId', 'tidalCountry', 'tidalPlaylist'
 $seed = [ordered]@{}
 if (Test-Path $SeedFrom) {
     $src = Get-Content $SeedFrom -Raw | ConvertFrom-Json

@@ -175,6 +175,8 @@ internal static class TidalTests
         Assert.True(BetterAudioPlaylist.SameSong(video, new TidalTrack("1", "Hole in the Roof", null, 200, ["AronChupa", "Little Sis Nora"], [], null)));
         Assert.True(BetterAudioPlaylist.SameSong(SongKey.Parse("Fatboy Slim ft. Bootsy Collins - Weapon Of Choice"),
             new TidalTrack("2", "Weapon Of Choice", "Remastered", 200, ["Fatboy Slim", "Bootsy Collins"], [], null)));
+        Assert.False(BetterAudioPlaylist.SameSong(SongKey.Parse("Alice DJ - Better Off Alone (Official Video)"),
+            new TidalTrack("4", "Better Off Alone", "UK Short Cut", 173, ["Alice DJ"], [], null)));
         Assert.False(BetterAudioPlaylist.SameSong(SongKey.Parse("Def Leppard - Hysteria"),
             new TidalTrack("3", "Hysteria", "Long Version", 355, ["Def Leppard"], [], null)));
     }

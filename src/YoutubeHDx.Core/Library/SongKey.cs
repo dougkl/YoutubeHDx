@@ -29,7 +29,7 @@ public static partial class SongKey
     public const double UnsureSeconds = 25;
 
     // Words that make a different version of a song. Counted, so "Live Is Life" vs "Live Is Life (Live)" differ.
-    [GeneratedRegex(@"\b(live|acoustic|unplugged|remix|rmx|mix|cover|demo|extended|long|edit|instrumental|karaoke|version|stereo|mono|concert|session|tour|totp|top of the pops|reprise|medley|mashup|parody|tribute|orchestral|symphonic|a ?cappella|rehearsal|bootleg|dub|reggae|slowed|sped up|nightcore|pt|part)\b")]
+    [GeneratedRegex(@"\b(live|acoustic|unplugged|remix|rmx|mix|cover|demo|extended|long|edit|instrumental|karaoke|version|stereo|mono|concert|session|tour|totp|top of the pops|reprise|medley|mashup|parody|tribute|orchestral|symphonic|a ?cappella|rehearsal|bootleg|dub|reggae|slowed|sped up|nightcore|pt|part|cut|short|radio)\b")]
     private static partial Regex MarkerWords();
 
     // "official version", "video version": just the normal video.
