@@ -82,6 +82,15 @@ public sealed class AppSettings
     /// <summary>Subfolders (by name) the duplicate check skips.</summary>
     public List<string> DuplicateSkipFolders { get; set; } = new() { "needremix", "Software", "Temp" };
 
+    /// <summary>Client ID of your app at developer.tidal.com (for the "better audio" playlist). Not a secret.</summary>
+    public string TidalClientId { get; set; } = "";
+
+    /// <summary>Country for TIDAL searches (ISO code).</summary>
+    public string TidalCountry { get; set; } = "US";
+
+    /// <summary>Update the TIDAL better-audio playlist daily (once you've signed in to TIDAL).</summary>
+    public bool TidalPlaylist { get; set; } = true;
+
     /// <summary>Write unavailable videos (removed, private, blocked...) to a CSV in the download folder.</summary>
     public bool ReportUnavailable { get; set; } = true;
 

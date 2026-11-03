@@ -311,6 +311,14 @@ public sealed partial class DuplicateFinder
         return _state.Last;
     }
 
+    /// <summary>Every video from the last check that stays visible in Plex (hidden duplicates left out).</summary>
+    public IReadOnlyList<FileFacts> VisibleFiles()
+    {
+        var hidden = (_state.Last ?? DuplicateResults.Empty).Duplicates.Where(d => d.State != "shown")
+            .Select(d => d.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        lock (_state) return _state.Facts.Values.Where(f => !hidden.Contains(f.Path)).OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
     // ---------------------------------------------------------------- your decisions
 
     /// <summary>Shows these files in Plex again, and never hides them again.</summary>

@@ -3,6 +3,7 @@ using YoutubeHDx.Core;
 using YoutubeHDx.Core.Library;
 using YoutubeHDx.Core.Lyrics;
 using YoutubeHDx.Core.Subtitles;
+using YoutubeHDx.Core.Tidal;
 
 namespace YoutubeHDx.App;
 
@@ -22,6 +23,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly InfoFileWriter _info;
     private readonly ActivityBoard _board = new();
     private readonly DuplicateFinder _duplicates;
+    private readonly BetterAudioPlaylist _tidal;
     private readonly CancellationTokenSource _stop = new();
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -50,6 +52,11 @@ internal sealed class TrayContext : ApplicationContext
         _scanner.Board = _board;
         _info = new InfoFileWriter(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), Http, FileLog.Write) { Board = _board };
         _duplicates = new DuplicateFinder(SettingsStore.Load, new FfmpegProbe(SettingsStore.Load), FileLog.Write) { Board = _board };
+        var tidalApi = new TidalApi(Http, async ct =>
+            (await TidalAuth.GetValidAsync(Http, SettingsStore.Load().TidalClientId, ct)
+             ?? throw new InvalidOperationException("Not signed in to TIDAL (tray → Library → TIDAL better-audio playlist).")).AccessToken,
+            settings.TidalCountry);
+        _tidal = new BetterAudioPlaylist(SettingsStore.Load, tidalApi, FileLog.Write) { Board = _board };
         _queue.FileSaved += (path, job) => _ = SafeBackground(async () =>
         {
             var s = SettingsStore.Load();
@@ -126,6 +133,8 @@ internal sealed class TrayContext : ApplicationContext
             _ui.Post(_ => _tray.ShowBalloonTip(6000, "Duplicate check finished",
                 $"{r.Duplicates.Count(d => d.State == "ignored")} copies hidden from Plex, {r.Check.Count} to check (Show downloads → Duplicates).", ToolTipIcon.Info), null);
         }));
+        library.DropDownItems.Add("TIDAL better-audio playlist: update now", null, (_, _) => _ = UpdateTidalAsync(interactive: true));
+        library.DropDownItems.Add("TIDAL: sign out", null, (_, _) => { TidalAuth.SignOut(); _tray.ShowBalloonTip(3000, "YoutubeHDx", "Signed out of TIDAL.", ToolTipIcon.Info); });
         library.DropDownItems.Add("Open renamed-files list", null, (_, _) =>
             SafeRun(() => OpenIfExists(Path.Combine(SettingsStore.Load().NasPath, DatedNameFixer.CsvName), "No files renamed so far.")));
         menu.Items.Add(library);
@@ -183,10 +192,57 @@ internal sealed class TrayContext : ApplicationContext
             }
             catch (InvalidOperationException ex) { FileLog.Write($"Duplicate check skipped: {ex.Message}"); }
         }
+        if (s.TidalPlaylist && !string.IsNullOrWhiteSpace(s.TidalClientId) && TidalAuth.Load() is not null)
+            await UpdateTidalAsync(interactive: false);
         if (announce || parts.Count > 0)
         {
             var text = parts.Count > 0 ? string.Join("; ", parts) : "Everything was already in order.";
             _ui.Post(_ => _tray.ShowBalloonTip(6000, "Library tidied", text, ToolTipIcon.Info), null);
+        }
+    }
+
+    /// <summary>
+    /// The TIDAL playlist of songs whose TIDAL track has the same length as the video. First time: asks for your
+    /// developer.tidal.com Client ID and opens TIDAL's own sign-in page.
+    /// </summary>
+    private async Task UpdateTidalAsync(bool interactive)
+    {
+        try
+        {
+            var s = SettingsStore.Load();
+            if (string.IsNullOrWhiteSpace(s.TidalClientId))
+            {
+                if (!interactive) return;
+                MessageBox.Show(
+                    "To build the TIDAL playlist, YoutubeHDx uses TIDAL's official API, which needs an app of yours:\n\n" +
+                    "1. Open developer.tidal.com, sign in, Dashboard → Create app.\n" +
+                    $"2. Add the redirect URI  {TidalAuth.RedirectUri}\n" +
+                    "3. Turn on the scopes search.read, playlists.read, playlists.write (and user.read).\n" +
+                    "4. Copy the Client ID (not the secret) and paste it in the next box.",
+                    "YoutubeHDx — TIDAL", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                var id = Prompt.Ask("TIDAL Client ID", "Client ID of your app at developer.tidal.com:");
+                if (string.IsNullOrWhiteSpace(id)) return;
+                s.TidalClientId = id.Trim();
+                SettingsStore.Save(s);
+            }
+
+            if (TidalAuth.Load() is null)
+            {
+                if (!interactive) return;
+                _ui.Post(_ => _tray.ShowBalloonTip(5000, "YoutubeHDx", "Sign in to TIDAL in the browser window that opens, and allow access.", ToolTipIcon.Info), null);
+                await TidalAuth.SignInAsync(Http, s.TidalClientId, url => Open(url), _stop.Token);
+            }
+
+            if (_duplicates.Results.ScannedAt is null) await _duplicates.ScanAsync(_stop.Token, preview: !s.DuplicateCheck);
+            var summary = await Task.Run(() => _tidal.RunAsync(_duplicates.VisibleFiles(), _stop.Token));
+            if (interactive || summary.Added > 0)
+                _ui.Post(_ => _tray.ShowBalloonTip(8000, "TIDAL playlist updated", summary.Describe() + $" (list: {BetterAudioPlaylist.CsvName})", ToolTipIcon.Info), null);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            FileLog.Write($"TIDAL playlist failed: {ex.Message}");
+            if (interactive) _ui.Post(_ => MessageBox.Show(ex.Message, "YoutubeHDx — TIDAL", MessageBoxButtons.OK, MessageBoxIcon.Warning), null);
         }
     }
 
