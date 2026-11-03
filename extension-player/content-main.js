@@ -15,7 +15,7 @@
 
   function freshState(videoId) {
     // prefs: this video's subtitle choices ({rejectYoutube, rejectedLyrics, offset, off}); null until loaded.
-    return { videoId, qualityDone: false, captionsDone: false, attempts: 0, sawAd: false, prefs: null, prefsWaits: 0 };
+    return { videoId, qualityDone: false, captionsDone: false, audioDone: false, attempts: 0, sawAd: false, prefs: null, prefsWaits: 0 };
   }
 
   const getPlayer = () => document.getElementById('movie_player');
@@ -190,7 +190,11 @@
 .yhdx-sync-menu .yhdx-item:hover { background: rgba(255,255,255,.1); }
 .yhdx-toast { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); z-index: 71; padding: 8px 14px;
   border-radius: 8px; background: rgba(28,28,28,.9); color: #fff; font: 500 14px Roboto, Arial, sans-serif;
-  pointer-events: none; }`;
+  pointer-events: none; }
+.yhdx-hq { position: absolute; left: 16px; bottom: 64px; z-index: 69; padding: 6px 12px; border-radius: 16px;
+  background: rgba(0,0,0,.55); color: #fff; font: 500 13px Roboto, Arial, sans-serif; pointer-events: none;
+  opacity: 0; transition: opacity 1.2s ease; }
+.yhdx-hq.yhdx-show { opacity: .85; }`;
 
   function ensureUiStyle() {
     if (ui.style) return;
@@ -202,7 +206,8 @@
 
   const hasPrefs = () => {
     const pr = state.prefs || {};
-    return Boolean(pr.off || pr.rejectYoutube || pr.rejectedLyrics?.length || pr.offset);
+    return Boolean(pr.off || pr.rejectYoutube || pr.rejectedLyrics?.length || pr.offset ||
+                   pr.audio || pr.audioOffset || pr.rejectedTracks?.length);
   };
 
   function setCurrent(value) {
@@ -218,8 +223,8 @@
       ensureUiStyle();
       const b = document.createElement('button');
       b.className = 'ytp-button yhdx-sync-button';
-      b.setAttribute('title', 'Subtitles out of sync?');
-      b.setAttribute('aria-label', 'Subtitles out of sync?');
+      b.setAttribute('title', 'Subtitles and audio: out of sync?');
+      b.setAttribute('aria-label', 'Subtitles and audio: out of sync?');
       b.textContent = '⇄';
       b.addEventListener('click', (e) => { e?.stopPropagation?.(); toggleMenu(); });
       // Right next to YouTube's CC button when it exists; otherwise at the start of the right-hand controls.
@@ -228,7 +233,7 @@
       else controls.prepend(b);
       ui.button = b;
     }
-    ui.button.style.display = current || hasPrefs() ? '' : 'none';
+    ui.button.style.display = current || hasPrefs() || audio.status === 'on' ? '' : 'none';
   }
 
   function closeMenu() {
@@ -248,6 +253,13 @@
     head.className = 'yhdx-head';
     head.textContent = describeCurrent();
     menu.appendChild(head);
+    const audioLine = describeAudio();
+    if (audioLine) {
+      const h2 = document.createElement('div');
+      h2.className = 'yhdx-head';
+      h2.textContent = audioLine;
+      menu.appendChild(h2);
+    }
     for (const [label, action] of menuItems()) {
       const item = document.createElement('div');
       item.className = 'yhdx-item';
@@ -280,7 +292,8 @@
       items.push(['Show lyrics 0.5 s later', () => nudgeLyrics(+0.5)]);
     }
     if (current) items.push(['Turn subtitles off for this video', subtitlesOffForVideo]);
-    if (hasPrefs()) items.push(['Reset subtitles for this video', resetVideo]);
+    items.push(...audioMenuItems());
+    if (hasPrefs()) items.push(['Reset subtitles and audio for this video', resetVideo]);
     return items;
   }
 
@@ -325,12 +338,14 @@
   }
 
   function resetVideo() {
+    const hadAudioPrefs = Boolean(state.prefs?.audio || state.prefs?.audioOffset || state.prefs?.rejectedTracks?.length);
     state.prefs = {};
+    if (hadAudioPrefs) { audioStop(); audio.requested = null; }
     stopLyrics();
     lyrics.requested = null;
     setCurrent(null);
     savePrefs();
-    toast('Subtitles reset for this video');
+    toast('Subtitles and audio reset for this video');
     state.captionsDone = false; // pick captions again from scratch
     state.attempts = 0;
     schedule();
@@ -349,6 +364,289 @@
     ui.toast = el;
     ui.toastTimer = setTimeout(() => { el.remove(); if (ui.toast === el) ui.toast = null; }, 3500);
   }
+
+  // ---------- TIDAL audio for music videos ----------
+  // If TIDAL has the same recording at the same length (see tidal.js), the extension plays TIDAL's audio and mutes
+  // YouTube's: a faded "High-quality audio found" sign shows at the bottom left. The video stays the clock; its time,
+  // play/pause and speed go to the TIDAL player a few times a second, and that player keeps itself in step.
+  // The ⇄ menu and YouTube's right-click menu can switch back, nudge the timing, or reject the TIDAL track.
+
+  const AUDIO_CLOCK_MS = 250;
+  let audio = { videoId: null, requested: null, track: null, status: 'idle', mutedByUs: false, timer: null, video: null,
+                listeners: null, quality: null, previewOnly: false, signInHintShown: false };
+
+  const videoElement = (p) => p?.querySelector?.('video.html5-main-video') ?? p?.querySelector?.('video') ?? null;
+  const isAd = (p) => p?.classList?.contains('ad-showing');
+
+  function audioEligible() {
+    return settings?.tidalAudio && !audio.previewOnly && state.prefs && state.prefs.audio !== 'youtube';
+  }
+
+  /** Called from tick(): once per video, ask whether TIDAL has the same recording. True when nothing more to do. */
+  function requestAudio(p) {
+    if (!settings?.tidalAudio || audio.previewOnly) return true;
+    if (!state.prefs) return false;
+    const vd = p.getVideoData?.() || {};
+    if (!vd.video_id || audio.requested === vd.video_id) return true;
+    if (state.prefs.audio === 'youtube') { audio.requested = vd.video_id; audio.videoId = vd.video_id; audio.status = 'youtube'; return true; }
+    const duration = Number(p.getDuration?.()) || 0;
+    if (!(duration > 0)) return false; // metadata not loaded yet
+    audio.requested = vd.video_id;
+    audio.videoId = vd.video_id;
+    audio.status = 'finding';
+    window.postMessage({ __yhdx: 'tidal-match-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration,
+                         exclude: state.prefs.rejectedTracks ?? [] }, location.origin);
+    return true;
+  }
+
+  function onAudioMatch(data) {
+    const p = getPlayer();
+    if (data.videoId !== audio.videoId || data.videoId !== p?.getVideoData?.()?.video_id || audio.status !== 'finding') return;
+    if (!data.track) {
+      audio.status = 'none';
+      if (data.signedOut && !audio.signInHintShown) {
+        audio.signInHintShown = true;
+        toast('TIDAL audio: sign in to TIDAL in the YoutubeHDx Player settings');
+      }
+      return;
+    }
+    if (!audioEligible()) { audio.status = 'idle'; return; }
+    audio.track = data.track;
+    audio.status = 'loading';
+    const offset = Number(state.prefs?.audioOffset) || 0;
+    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id,
+                         at: Math.max(0, (Number(p.getCurrentTime?.()) || 0) + offset) }, location.origin);
+    startAudioClock();
+  }
+
+  function onAudioStatus(data) {
+    if (!audio.track || (data.trackId != null && String(data.trackId) !== String(audio.track.id))) {
+      if (data.status !== 'taken') return;
+    }
+    switch (data.status) {
+      case 'loaded':
+        if (audio.status === 'loading') audio.status = 'ready'; // TIDAL is ready: YouTube's sound goes off
+        if (!isAd(getPlayer())) muteYoutube(true);
+        break;
+      case 'playing':
+        if (audio.status !== 'on') {
+          audio.status = 'on';
+          audio.quality = data.quality;
+          muteYoutube(true);
+          showHqBadge();
+          updateSyncButton();
+        }
+        break;
+      case 'preview':
+        audio.previewOnly = true; // TIDAL only gives this app previews: don't try again on every video
+        audioStop();
+        toast('TIDAL only plays previews for this app, so the video keeps YouTube\'s sound');
+        break;
+      case 'revoked':
+        audioStop();
+        toast('TIDAL is playing on another device; back to YouTube\'s sound');
+        break;
+      case 'taken':
+        audioStop(false);
+        break;
+      case 'error':
+        audioStop();
+        toast(`TIDAL audio failed${data.message ? `: ${data.message}` : ''}; back to YouTube's sound`);
+        break;
+      default:
+        break;
+    }
+  }
+
+  function muteYoutube(on) {
+    const v = videoElement(getPlayer());
+    if (!v) return;
+    if (on) {
+      if (!v.muted) { v.muted = true; audio.mutedByUs = true; }
+    } else if (audio.mutedByUs) {
+      v.muted = false;
+      audio.mutedByUs = false;
+    }
+  }
+
+  function sendClock() {
+    const p = getPlayer();
+    if (!audio.track || !p) return;
+    const v = videoElement(p);
+    const ad = isAd(p);
+    // Ads keep their own sound; the music video's is muted again when it comes back.
+    if (audio.status === 'ready' || audio.status === 'on') muteYoutube(!ad);
+    const playing = Boolean(v && !v.paused && !v.seeking && !ad && (v.readyState ?? 4) >= 3);
+    const volume = p.isMuted?.() ? 0 : (Number(p.getVolume?.() ?? 100) / 100);
+    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: Number(p.getCurrentTime?.()) || 0,
+                         playing, rate: Number(v?.playbackRate) || 1, offset: Number(state.prefs?.audioOffset) || 0,
+                         volume, sentAt: Date.now() }, location.origin);
+  }
+
+  function startAudioClock() {
+    clearInterval(audio.timer);
+    audio.timer = setInterval(sendClock, AUDIO_CLOCK_MS);
+    const v = videoElement(getPlayer());
+    if (v && audio.video !== v) {
+      detachVideoListeners();
+      const now = () => sendClock();
+      for (const ev of ['play', 'pause', 'seeked', 'ratechange', 'waiting', 'playing']) v.addEventListener?.(ev, now);
+      audio.video = v;
+      audio.listeners = now;
+    }
+    sendClock();
+  }
+
+  function detachVideoListeners() {
+    if (audio.video && audio.listeners) {
+      for (const ev of ['play', 'pause', 'seeked', 'ratechange', 'waiting', 'playing']) audio.video.removeEventListener?.(ev, audio.listeners);
+    }
+    audio.video = null;
+    audio.listeners = null;
+  }
+
+  /** Back to YouTube's sound (and tell the TIDAL player to stop). */
+  function audioStop(tellPlayer = true) {
+    clearInterval(audio.timer);
+    audio.timer = null;
+    detachVideoListeners();
+    if (tellPlayer && audio.track) window.postMessage({ __yhdx: 'tidal-audio', cmd: 'stop' }, location.origin);
+    muteYoutube(false);
+    hideHqBadge();
+    const wasOn = audio.status === 'on';
+    audio.track = null;
+    audio.status = 'idle';
+    audio.quality = null;
+    if (wasOn) updateSyncButton();
+  }
+
+  function showHqBadge() {
+    const p = getPlayer();
+    if (!p) return;
+    ensureUiStyle();
+    hideHqBadge();
+    const el = document.createElement('div');
+    el.className = 'yhdx-hq';
+    const q = audio.quality === 'HI_RES_LOSSLESS' ? 'Hi-Res' : audio.quality === 'LOSSLESS' ? 'Lossless' : '';
+    el.textContent = `♪ High-quality audio found · TIDAL${q ? ` ${q}` : ''}`;
+    p.appendChild(el);
+    ui.hq = el;
+    setTimeout(() => el.classList?.add('yhdx-show'), 30);
+    ui.hqTimer = setTimeout(() => el.classList?.remove('yhdx-show'), 5000);
+    setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 7000);
+  }
+
+  function hideHqBadge() {
+    clearTimeout(ui.hqTimer);
+    ui.hq?.remove();
+    ui.hq = null;
+  }
+
+  function describeAudio() {
+    if (audio.status === 'on') {
+      const offset = Number(state.prefs?.audioOffset) || 0;
+      const t = audio.track;
+      return `Audio: TIDAL · ${t.artists?.[0] ?? ''} – ${t.version ? `${t.title} (${t.version})` : t.title}` +
+        (offset ? ` · ${offset > 0 ? '+' : ''}${offset.toFixed(2)} s` : '');
+    }
+    if (state.prefs?.audio === 'youtube') return "Audio: YouTube's sound (your choice for this video)";
+    return '';
+  }
+
+  function audioMenuItems() {
+    const items = [];
+    if (audio.status === 'on') {
+      items.push(["TIDAL sound is late: play it 0.1 s earlier", () => nudgeAudio(+0.1)]);
+      items.push(["TIDAL sound is early: play it 0.1 s later", () => nudgeAudio(-0.1)]);
+      items.push(['Not the same recording: try another TIDAL track', rejectTrack]);
+      items.push(["Use YouTube's sound for this video", useYoutubeAudio]);
+    } else if (state.prefs?.audio === 'youtube' && settings?.tidalAudio) {
+      items.push(["Use TIDAL's sound for this video", useTidalAudio]);
+    }
+    return items;
+  }
+
+  function nudgeAudio(delta) {
+    const prefs = (state.prefs ||= {});
+    prefs.audioOffset = Math.round(((Number(prefs.audioOffset) || 0) + delta) * 100) / 100;
+    savePrefs();
+    sendClock();
+    toast(`TIDAL timing: ${prefs.audioOffset > 0 ? '+' : ''}${prefs.audioOffset.toFixed(2)} s`);
+  }
+
+  function rejectTrack() {
+    const prefs = (state.prefs ||= {});
+    if (audio.track) prefs.rejectedTracks = [...new Set([...(prefs.rejectedTracks || []), String(audio.track.id)])];
+    prefs.audioOffset = 0;
+    savePrefs();
+    audioStop();
+    audio.requested = null;
+    toast('Looking for another TIDAL recording…');
+    requestAudio(getPlayer());
+  }
+
+  function useYoutubeAudio() {
+    (state.prefs ||= {}).audio = 'youtube';
+    savePrefs();
+    audioStop();
+    audio.status = 'youtube';
+    toast("YouTube's sound for this video");
+  }
+
+  function useTidalAudio() {
+    if (state.prefs) delete state.prefs.audio;
+    savePrefs();
+    audio.requested = null;
+    audio.status = 'idle';
+    requestAudio(getPlayer());
+  }
+
+  // ---------- YouTube's right-click menu ----------
+  // Our entries go at the top of YouTube's own right-click menu on the video: "Subtitles and audio…" opens the ⇄
+  // menu, and a quick switch between TIDAL's and YouTube's sound when TIDAL has the song.
+
+  function contextMenuItems() {
+    const items = [['YoutubeHDx: subtitles and audio…', () => toggleMenu()]];
+    if (audio.status === 'on') items.push(["YoutubeHDx: use YouTube's sound", useYoutubeAudio]);
+    else if (state.prefs?.audio === 'youtube' && settings?.tidalAudio) items.push(["YoutubeHDx: use TIDAL's sound", useTidalAudio]);
+    return items;
+  }
+
+  function fillContextMenu() {
+    const panel = document.querySelector('.ytp-contextmenu .ytp-panel-menu');
+    if (!panel) return;
+    for (const old of [...(panel.querySelectorAll?.('.yhdx-ctx') ?? [])]) old.remove();
+    const items = contextMenuItems();
+    for (let i = items.length - 1; i >= 0; i--) {
+      const [label, action] = items[i];
+      const item = document.createElement('div');
+      item.className = 'ytp-menuitem yhdx-ctx';
+      item.setAttribute('role', 'menuitem');
+      item.setAttribute('tabindex', '0');
+      const icon = document.createElement('div');
+      icon.className = 'ytp-menuitem-icon';
+      const text = document.createElement('div');
+      text.className = 'ytp-menuitem-label';
+      text.textContent = label;
+      const content = document.createElement('div');
+      content.className = 'ytp-menuitem-content';
+      item.appendChild(icon);
+      item.appendChild(text);
+      item.appendChild(content);
+      item.addEventListener('click', (e) => {
+        e?.stopPropagation?.();
+        const menu = document.querySelector('.ytp-contextmenu');
+        if (menu?.style) menu.style.display = 'none';
+        action();
+      });
+      panel.prepend(item);
+    }
+  }
+
+  document.addEventListener('contextmenu', (e) => {
+    if (!e?.target?.closest?.('#movie_player') && e?.target !== getPlayer()) return;
+    setTimeout(fillContextMenu, 0); // YouTube opens its menu in the same event; fill it right after
+  }, true);
 
   // ---------- caption repair ----------
   // YouTube sometimes answers the caption request with an empty body, aborts it, or never finishes it (its
@@ -501,6 +799,7 @@
       closeMenu();
       setCurrent(null);
     }
+    if (audio.videoId && audio.videoId !== videoId) { audioStop(); audio.videoId = null; audio.requested = null; }
     if (lyrics.videoId && lyrics.videoId !== videoId) stopLyrics();
     if (p.classList.contains('ad-showing')) { state.sawAd = true; schedule(); return; } // wait for the real video
 
@@ -512,9 +811,10 @@
       if (!state.prefs && ++state.prefsWaits > 3) state.prefs = {};
     }
     if (state.prefs && !state.captionsDone) state.captionsDone = applyCaptions(p);
+    if (!state.audioDone) state.audioDone = requestAudio(p);
     updateSyncButton();
 
-    if (!(state.qualityDone && state.captionsDone) && state.attempts < MAX_ATTEMPTS) schedule();
+    if (!(state.qualityDone && state.captionsDone && state.audioDone) && state.attempts < MAX_ATTEMPTS) schedule();
   }
 
   function restart() {
@@ -525,6 +825,8 @@
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data) return;
     if (e.data.__yhdx === 'lyrics') { onLyrics(e.data); return; }
+    if (e.data.__yhdx === 'tidal-match') { onAudioMatch(e.data); return; }
+    if (e.data.__yhdx === 'tidal-audio-status') { onAudioStatus(e.data); return; }
     if (e.data.__yhdx === 'prefs') {
       if (e.data.videoId === state.videoId && !state.prefs) state.prefs = e.data.prefs || {};
       return;
@@ -533,12 +835,17 @@
     settings = e.data.settings;
     if (!settings.lyricsWhenNoCaptions || settings.captions !== 'english') { stopLyrics(); lyrics.requested = null; }
     captionCss = e.data.captionCss || '';
+    if (!settings.tidalAudio) audioStop();
     applyStyle();
     restart();
   });
 
   // YouTube is a single-page app: re-apply on every navigation and whenever a new source loads (e.g. after an ad).
-  window.addEventListener('yt-navigate-finish', restart);
+  window.addEventListener('yt-navigate-finish', () => {
+    if (!isWatchPage()) { audioStop(); audio.videoId = null; audio.requested = null; }
+    restart();
+  });
+  window.addEventListener('pagehide', () => audioStop());
   document.addEventListener('yt-player-updated', restart);
   document.addEventListener('loadeddata', (e) => {
     if (!(e.target instanceof HTMLVideoElement)) return;

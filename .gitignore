@@ -18,3 +18,6 @@ downloader-config.json
 
 # local transfer bundles and one-off tools
 .bundles/
+
+# made by build-pack (your TIDAL Client ID)
+extension-player/tidal-config.json

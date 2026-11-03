@@ -14,6 +14,8 @@ export const readManifest = (which) =>
 const timerApi = {
   setTimeout: (...a) => globalThis.setTimeout(...a),
   clearTimeout: (...a) => globalThis.clearTimeout(...a),
+  setInterval: (...a) => globalThis.setInterval(...a),
+  clearInterval: (...a) => globalThis.clearInterval(...a),
 };
 
 /** defaults.js as a module-like object. */
@@ -42,7 +44,18 @@ export class FakePlayer {
     this.currentTrack = null;
     this.calls = [];
     this.classList = { contains: (c) => c === 'ad-showing' && this.ad };
+    this.volume = 80;
+    this.muted = false; // YouTube's own mute button
+    // The <video> element YouTube plays into.
+    this.video = {
+      muted: false, paused: false, seeking: false, readyState: 4, playbackRate: 1, listeners: {},
+      addEventListener(t, fn) { (this.listeners[t] ??= []).push(fn); },
+      removeEventListener(t, fn) { this.listeners[t] = (this.listeners[t] ?? []).filter((f) => f !== fn); },
+      fire(t) { for (const fn of this.listeners[t] ?? []) fn({}); },
+    };
   }
+  getVolume() { return this.volume; }
+  isMuted() { return this.muted; }
   getVideoData() { return { video_id: this.videoId, title: this.title, author: this.author }; }
   getDuration() { return this.duration; }
   appendChild(el) { this.children.push(el); el.parent = this; }
@@ -59,7 +72,11 @@ export class FakePlayer {
     if (module === 'captions' && option === 'track') this.currentTrack = value?.languageCode ? value : null;
   }
   getCurrentTime() { return this.time; }
-  querySelector(sel) { return sel === '.ytp-right-controls' ? this.controls ?? null : null; }
+  querySelector(sel) {
+    if (sel === '.ytp-right-controls') return this.controls ?? null;
+    if (sel.startsWith('video')) return this.video;
+    return null;
+  }
   loadVideoById(arg) { this.calls.push(['loadVideoById', arg]); }
   loadModule(m) { this.calls.push(['loadModule', m]); if (m === 'captions') this.captionsLoaded = true; }
   unloadModule(m) { this.calls.push(['unloadModule', m]); }
@@ -96,6 +113,18 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
         }
         return null;
       };
+      el.classList = {
+        add: (c) => { const set = new Set(String(el.className).split(' ').filter(Boolean)); set.add(c); el.className = [...set].join(' '); },
+        remove: (c) => { el.className = String(el.className).split(' ').filter((x) => x && x !== c).join(' '); },
+        contains: (c) => String(el.className).split(' ').includes(c),
+      };
+      el.querySelectorAll = (sel) => {
+        const cls = sel.startsWith('.') ? sel.slice(1) : null;
+        const out = [];
+        const walk = (n) => { for (const c of n.children ?? []) { if (cls && String(c.className).split(' ').includes(cls)) out.push(c); walk(c); } };
+        walk(el);
+        return out;
+      };
       el.attrs = {};
       el.setAttribute = (k, v) => { el.attrs[k] = String(v); };
       el.listeners = {};
@@ -108,7 +137,12 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
       };
       return el;
     },
-    querySelector: (sel) => (sel.includes(':not(.yhdx-lyrics)') && page.youtubeCaptionsShowing ? {} : null),
+    querySelector: (sel) => {
+      if (sel.includes(':not(.yhdx-lyrics)')) return page.youtubeCaptionsShowing ? {} : null;
+      if (sel === '.ytp-contextmenu .ytp-panel-menu') return page.contextMenu?.panel ?? null;
+      if (sel === '.ytp-contextmenu') return page.contextMenu ?? null;
+      return null;
+    },
     addEventListener: (type, fn) => (docListeners[type] ??= []).push(fn),
   };
 
@@ -145,6 +179,22 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
       for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'settings', settings, captionCss } });
     },
     fireWindow(type) { for (const fn of winListeners[type] ?? []) fn({}); },
+    /** The bridge answering a TIDAL match request. */
+    sendTidalMatch(videoId, track, extra = {}) {
+      for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'tidal-match', videoId, track, ...extra } });
+    },
+    /** Status from the TIDAL player (via service worker and bridge). */
+    sendAudioStatus(status, extra = {}) {
+      for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'tidal-audio-status', status, ...extra } });
+    },
+    /** Right-click on the video: YouTube shows its menu, then our listener fills it. */
+    rightClick() {
+      page.contextMenu = page.makeElement('div');
+      page.contextMenu.style = { display: '' };
+      page.contextMenu.panel = page.makeElement('div');
+      page.contextMenu.panel.className = 'ytp-panel-menu';
+      for (const fn of docListeners.contextmenu ?? []) fn({ target: page.player });
+    },
     fireVideoLoaded() {
       for (const fn of docListeners.loadeddata ?? []) fn({ target: new HTMLVideoElement() });
     },
@@ -218,10 +268,20 @@ export function loadLyrics() {
 /** Player background.js with lyrics.js (importScripts) and fake chrome storage + fetch. */
 export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () => Date.now() } = {}) {
   const local = { openSubtitlesKey };
-  let onMessage;
+  const onMessage = [];
+  const sentToRuntime = [];
+  const sentToTabs = [];
   const chrome = {
     action: { onClicked: { addListener: () => {} } },
-    runtime: { openOptionsPage: () => {}, onMessage: { addListener: (fn) => { onMessage = fn; } } },
+    runtime: {
+      openOptionsPage: () => {},
+      onMessage: { addListener: (fn) => onMessage.push(fn) },
+      getURL: (p) => `chrome-extension://test/${p}`,
+      sendMessage: async (m) => { sentToRuntime.push(m); },
+    },
+    tabs: { sendMessage: async (id, m) => { sentToTabs.push([id, m]); }, onRemoved: { addListener: () => {} } },
+    offscreen: { hasDocument: async () => offscreen.open, createDocument: async (o) => { offscreen.open = true; offscreen.created.push(o); } },
+    identity: { getRedirectURL: (p) => `https://test.chromiumapp.org/${p}`, launchWebAuthFlow: async (o) => identity(o) },
     storage: {
       local: {
         get: async (q) => {
@@ -231,28 +291,45 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
           return out;
         },
         set: async (obj) => Object.assign(local, obj),
+        remove: async (k) => { for (const key of [].concat(k)) delete local[key]; },
       },
     },
   };
+  const offscreen = { open: false, created: [] };
+  let identity = async () => { throw new Error('no sign-in in this test'); };
   const ctx = vm.createContext({
-    chrome, URL, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
-    Date: { now },
+    chrome, URL, URLSearchParams, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
+    Date: { now }, TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise,
   });
   ctx.importScripts = (name) => vm.runInContext(playerSource(name), ctx);
   vm.runInContext(playerSource('background.js'), ctx);
+  const dispatch = (msg, sender = {}) => new Promise((resolve) => {
+    let handled = false;
+    for (const fn of onMessage) if (fn(msg, sender, resolve) === true) handled = true;
+    if (!handled) resolve(undefined);
+  });
   return {
     local,
-    ask: (msg) => new Promise((resolve) => onMessage({ type: 'lyrics', ...msg }, {}, resolve)),
+    offscreen,
+    sentToRuntime,
+    sentToTabs,
+    setIdentity: (fn) => { identity = fn; },
+    ask: (msg) => dispatch({ type: 'lyrics', ...msg }),
+    send: dispatch,
   };
 }
 
 /** Runs defaults.js + content-bridge.js (isolated world) with the given saved settings; returns what it posts. */
-export async function runBridge(saved = {}, { lyricsReply = null, onSend = () => {}, local = {} } = {}) {
+export async function runBridge(saved = {}, { lyricsReply = null, onSend = () => {}, local = {}, reply = null } = {}) {
   const posted = [];
   const listeners = [];
+  const runtimeListeners = [];
   const window = { addEventListener: (t, fn) => listeners.push(fn), postMessage: (data) => posted.push(data) };
   const chrome = {
-    runtime: { sendMessage: async (msg) => { onSend(msg); return lyricsReply; } },
+    runtime: {
+      sendMessage: async (msg) => { onSend(msg); return reply ? reply(msg) : lyricsReply; },
+      onMessage: { addListener: (fn) => runtimeListeners.push(fn) },
+    },
     storage: {
       sync: { get: async (defaults) => ({ ...structuredClone(defaults), ...saved }) },
       local: {
@@ -268,6 +345,7 @@ export async function runBridge(saved = {}, { lyricsReply = null, onSend = () =>
   await new Promise((r) => setImmediate(r));
   posted.receive = async (data) => { for (const fn of listeners) fn({ source: window, data }); await new Promise((r) => setImmediate(r)); };
   posted.local = local;
+  posted.fromServiceWorker = async (msg) => { for (const fn of runtimeListeners) fn(msg, {}, () => {}); await new Promise((r) => setImmediate(r)); };
   return posted;
 }
 
@@ -316,4 +394,11 @@ export function loadBackground({ cookies = [], nativeReply = { ok: true, message
     /** Simulates chrome.runtime.sendMessage from the popup. */
     message: (msg) => new Promise((resolve) => listeners.message(msg, {}, resolve)),
   };
+}
+
+/** tidal.js as a module-like object. */
+export function loadTidal() {
+  const ctx = vm.createContext({ TextEncoder, btoa, crypto: globalThis.crypto, URL });
+  vm.runInContext(playerSource('tidal.js') + '\n;globalThis.__x = { yhdxSongParse, yhdxTidalSameSong, yhdxTidalPick, yhdxIsoSeconds, yhdxTidalSearch, yhdxTidalFind, yhdxSyncStep, yhdxPkce, yhdxTidalAuthorizeUrl, yhdxSongNorm };', ctx);
+  return ctx.__x;
 }

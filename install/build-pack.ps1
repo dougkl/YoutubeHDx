@@ -37,6 +37,7 @@ Copy-Item (Join-Path $PSScriptRoot 'pack\Downloader\*') (Join-Path $pack 'Downlo
 # Player: just the extension.
 New-Item -ItemType Directory -Force -Path (Join-Path $pack 'Player') | Out-Null
 Copy-Item (Join-Path $root 'extension-player') (Join-Path $pack 'Player\extension') -Recurse
+Remove-Item (Join-Path $pack 'Player\extension\src') -Recurse -Force -ErrorAction SilentlyContinue  # build source, not needed in Chrome
 Copy-Item (Join-Path $PSScriptRoot 'pack\Player\*') (Join-Path $pack 'Player')
 Copy-Item (Join-Path $PSScriptRoot 'pack\README.txt') $pack
 
@@ -54,6 +55,11 @@ if (Test-Path $SeedFrom) {
     $seed.nasPath = '\\nas\media\YouTube'
     $seed.watchedPlaylists = @()
     Write-Warning "No settings at $SeedFrom; the pack uses a placeholder NAS path. Edit Downloader\downloader-config.json."
+}
+# The Player signs in to TIDAL with the same developer app as the downloader: hand it the Client ID (not a secret).
+if ($seed.Contains('tidalClientId') -and $seed.tidalClientId) {
+    [IO.File]::WriteAllText((Join-Path $pack 'Player\extension\tidal-config.json'),
+        (@{ clientId = $seed.tidalClientId } | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
 }
 [IO.File]::WriteAllText((Join-Path $pack 'Downloader\downloader-config.json'),
     ($seed | ConvertTo-Json -Depth 6), (New-Object Text.UTF8Encoding $false))

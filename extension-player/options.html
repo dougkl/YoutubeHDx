@@ -52,6 +52,22 @@
     </section>
 
     <section>
+      <h2>TIDAL audio for music videos</h2>
+      <label class="row"><input type="checkbox" id="tidalAudio"> When TIDAL has the same recording (same length), play TIDAL's audio in sync and mute YouTube's</label>
+      <p class="muted small">Uses TIDAL's official web player with your TIDAL account; nothing is downloaded or recorded.
+        TIDAL plays on one device at a time. Switch back for one video with the ⇄ button or YouTube's right-click menu.</p>
+      <label class="field">TIDAL Client ID (your app at developer.tidal.com)
+        <input type="text" id="tidalClientId" autocomplete="off" placeholder="Filled in by the install pack">
+      </label>
+      <p class="muted small">In that app, add this redirect URI: <code id="tidalRedirect"></code></p>
+      <div class="row">
+        <button type="button" id="tidalSignIn" class="secondary">Sign in to TIDAL</button>
+        <button type="button" id="tidalSignOut" class="secondary">Sign out</button>
+        <span id="tidalState" role="status"></span>
+      </div>
+    </section>
+
+    <section>
       <h2>Clean up the player</h2>
       <label class="row"><input type="checkbox" id="hideEndCards"> Hide end cards (the video, channel and playlist boxes over the last seconds)</label>
       <label class="row"><input type="checkbox" id="hideEndScreen"> Hide the suggestions wall when a video ends</label>

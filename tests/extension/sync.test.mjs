@@ -40,7 +40,7 @@ describe('the out-of-sync button', () => {
     const btn = page.syncButton();
     assert.ok(btn, 'button added to .ytp-right-controls');
     assert.equal(btn.style.display, '');
-    assert.equal(btn.attrs['aria-label'], 'Subtitles out of sync?');
+    assert.equal(btn.attrs['aria-label'], 'Subtitles and audio: out of sync?');
     btn.click();
     assert.match(page.menu().children[0].textContent, /Showing: English/);
     assert.deepEqual(page.menuItems(), ['Out of sync: try other subtitles', 'Turn subtitles off for this video']);
@@ -145,10 +145,10 @@ describe('the out-of-sync button', () => {
     assert.equal(trackSets(again).filter((c) => c[3]?.languageCode).length, 0);
     assert.equal(lyricsRequests(again).length, 0);
     again.syncButton().click();
-    assert.deepEqual(again.menuItems(), ['Reset subtitles for this video']);
+    assert.deepEqual(again.menuItems(), ['Reset subtitles and audio for this video']);
 
     again.player.calls.length = 0;
-    again.chooseMenu('Reset subtitles for this video');
+    again.chooseMenu('Reset subtitles and audio for this video');
     advance(600);
     assert.deepEqual(plain(again.savedPrefs.vid1), {});
     assert.equal(trackSets(again).filter((c) => c[3]?.languageCode).length, 1); // YouTube captions picked again

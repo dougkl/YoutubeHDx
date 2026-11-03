@@ -10,6 +10,7 @@ const YHDX_DEFAULTS = {
   hideEndCards: true,           // video/channel/playlist boxes over the last seconds + "i" info-card teasers
   hideEndScreen: true,          // suggestions wall when a video ends (autoplay countdown stays, so it can be canceled)
   hideComments: true,           // comments under the video (and the comments panel on Shorts)
+  tidalAudio: true,             // music video with the same recording on TIDAL (same length)? play TIDAL's audio in sync
   captionStyle: {
     enabled: true,
     fontFamily: '"Segoe UI", Roboto, Arial, sans-serif',
