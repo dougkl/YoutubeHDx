@@ -106,6 +106,16 @@ public static partial class SongKey
 
         var sameNames = a.Artist.Length > 0 && b.Artist.Length > 0 &&
                         ((a.Artist == b.Artist && a.Track == b.Track) || (a.Artist == b.Track && a.Track == b.Artist));
+        if (sameNames && a.Markers.Count > 0)
+        {
+            // Both are e.g. "live": "Live at Leeds" and "Live at the Isle of Wight" are still different recordings.
+            var da = Details(a);
+            var db = Details(b);
+            if (da.Count > 0 && db.Count > 0 && !da.Overlaps(db) && Similarity(string.Join(" ", da), string.Join(" ", db)) < 0.8)
+                return new(SongMatch.Different, $"different {a.MarkerText} versions ({string.Join(" ", da)} / {string.Join(" ", db)})");
+            if ((da.Count == 0) != (db.Count == 0))
+                return new(SongMatch.Unsure, $"both {a.MarkerText}, but only one says which ({string.Join(" ", da.Count > 0 ? da : db)})");
+        }
         if (sameNames)
         {
             if (a.Kind != b.Kind) return new(SongMatch.Unsure, $"same song, but one is a {(a.Kind == "video" ? b.Kind : a.Kind)} video");
@@ -139,6 +149,27 @@ public static partial class SongKey
         }
 
         return new(SongMatch.Different, "different songs");
+    }
+
+    private static readonly HashSet<string> Small = ["at", "the", "of", "in", "from", "a", "an", "and", "on", "for", "with", "to", "by", "s"];
+
+    /// <summary>
+    /// What the version words are about: "Live at Leeds" -> {leeds}, "Fierce Panda Version" -> {fierce, panda}. The words
+    /// of the name that aren't the artist or the song, without "official video" noise, years, version words or small words.
+    /// </summary>
+    public static HashSet<string> Details(SongId s)
+    {
+        var t = Fold(s.Raw).Replace("'", "");
+        t = Regex.Replace(t, @"\b(feat\.?|ft\.?|featuring|with)\s[^()\[\]{}\-–—]*", " ");
+        t = Year().Replace(t, " ");
+        t = PlainVersion().Replace(t, " ");
+        t = Noise().Replace(t, " ");
+        t = MarkerWords().Replace(t, " ");
+        var words = Regex.Split(t, @"[^\p{L}\p{N}]+").Where(w => w.Length > 0).ToHashSet();
+        foreach (var w in (s.Artist + " " + s.Track).Split(' ', StringSplitOptions.RemoveEmptyEntries)) { words.Remove(w); words.Remove(w + "s"); }
+        words.ExceptWith(Small);
+        words.RemoveWhere(w => w.Length == 1 || (w.All(char.IsDigit) && w.Length <= 2));
+        return words;
     }
 
     private static bool SameMarkers(SongId a, SongId b) =>

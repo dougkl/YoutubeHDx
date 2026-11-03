@@ -266,3 +266,30 @@ internal static class SongKeyMoreTests
         Assert.Equal(SongMatch.Different, SongKey.Compare(SongKey.Parse("Hello"), 200, SongKey.Parse("Hello (Live)"), 200).Match);
     }
 }
+
+internal static class SongKeyLiveTests
+{
+    private static SongMatch M(string a, string b, double len = 300) => SongKey.Compare(SongKey.Parse(a), len, SongKey.Parse(b), len).Match;
+
+    [Test]
+    public static void LiveRecordingsMustBeTheSameShow()
+    {
+        Assert.Equal(SongMatch.Different, M("The Who - Pinball Wizard (Live at the Isle of Wight, 1970)", "The Who - Pinball Wizard (Live At Leeds/1970)"));
+        Assert.Equal(SongMatch.Different, M("Amy Winehouse - Back To Black (Live at Other Voices, 2006)", "Amy Winehouse - Back To Black (Live From Shepherd's Bush Empire, London / 2007)"));
+        Assert.Equal(SongMatch.Unsure, M("The Who - Pinball Wizard (Live)", "The Who - Pinball Wizard (Live at the Isle of Wight, 1970)"));
+        Assert.Equal(SongMatch.Same, M("Stevie Nicks - Edge Of Seventeen (Live In Chicago)", "Stevie Nicks - Edge Of Seventeen (Live In Chicago) (HQ)"));
+        Assert.Equal(SongMatch.Same, M("Eric Johnson - Cliffs Of Dover - Live", "Eric Johnson - Cliffs of Dover (Live)"));
+        Assert.Equal(SongMatch.Same, M("Fatboy Slim ft. Bootsy Collins - Weapon Of Choice (Live)", "Fatboy Slim - Weapon Of Choice (Live)"));
+    }
+
+    [Test]
+    public static void NamedMixesAndVersionsMustMatch()
+    {
+        Assert.Equal(SongMatch.Different, M("The Doors - Love Me Two Times (Single Mix)", "The Doors - Love Me Two Times (Atmos Mix)"));
+        Assert.Equal(SongMatch.Different, M("Keane - Everybody's Changing (Alternate Version)", "Keane - Everybody's Changing (Fierce Panda Version)"));
+        Assert.Equal(SongMatch.Same, M("Modern Talking - You're My Heart You're My Soul (New Version)", "Modern Talking - You're My Heart You're My Soul (New Version 2017)"));
+        Assert.Equal(SongMatch.Same, M("Seal - Kiss From A Rose [Seal Version] (Official Video)", "Seal - Kiss from a Rose (Seal's Version)"));
+        Assert.Equal(SongMatch.Different, M("Peter Schilling - Major Tom (Coming Home)", "Peter Schilling - Major Tom (Coming Home) (Director's Cut)"));
+        Assert.Equal(SongMatch.Different, M("Gigi D'Agostino - Another Way (Official Video)", "Gigi D'Agostino - Another Way (Radio Cut)"));
+    }
+}

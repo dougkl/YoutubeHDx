@@ -57,12 +57,30 @@ internal sealed class FakeTidal : HttpMessageHandler
             Playlists++;
             return Json(new { data = new { id = "pl-" + Playlists, type = "playlists" } }, HttpStatusCode.Created);
         }
-        if (req.Method == HttpMethod.Get && url.StartsWith("/v2/playlists/"))
+        if (req.Method == HttpMethod.Get && url.StartsWith("/v2/playlists/") && !url.Contains("/relationships/"))
             return PlaylistGone ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{}") } : Json(new { data = new { id = "x" } });
         if (req.Method == HttpMethod.Post && url.Contains("/relationships/items"))
         {
             using var doc = JsonDocument.Parse(Bodies[^1]);
             Added.AddRange(doc.RootElement.GetProperty("data").EnumerateArray().Select(d => d.GetProperty("id").GetString()!));
+            return Json(new { });
+        }
+        if (req.Method == HttpMethod.Get && url.Contains("/relationships/items"))
+        {
+            // two pages, to exercise links.next
+            var all = Added.Select((id, i) => new { id, type = "tracks", meta = new { itemId = "item-" + id } }).ToList();
+            var second = url.Contains("page[cursor]=2");
+            var page = second ? all.Skip(1).ToList() : all.Take(1).ToList();
+            return Json(new { data = page, links = new { self = "x", next = !second && all.Count > 1 ? "/playlists/p/relationships/items?page[cursor]=2" : null } });
+        }
+        if (req.Method == HttpMethod.Delete && url.Contains("/relationships/items"))
+        {
+            using var doc = JsonDocument.Parse(Bodies[^1]);
+            foreach (var d in doc.RootElement.GetProperty("data").EnumerateArray())
+            {
+                Assert.Equal("item-" + d.GetProperty("id").GetString(), d.GetProperty("meta").GetProperty("itemId").GetString());
+                Added.Remove(d.GetProperty("id").GetString()!);
+            }
             return Json(new { });
         }
         return new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("{}") };
@@ -223,5 +241,30 @@ internal static class TidalTests
         s = await builder.RunAsync(videos, CancellationToken.None);
         Assert.Equal(2, fake.Playlists);
         Assert.Equal(1, s.Added);
+        fake.PlaylistGone = false;
+
+        // You take a track out yourself: it is not put back.
+        fake.Added.Clear();
+        s = await builder.RunAsync(videos, CancellationToken.None);
+        Assert.Equal(0, s.Added);
+        Assert.Equal(0, fake.Added.Count);
+    }
+
+    [Test]
+    public static async Task TracksThatNoLongerMatchAreTakenOut()
+    {
+        var (builder, fake, nas) = Make();
+        fake.Search["Pink Floyd Learning To Fly"] = [new("100", "Learning To Fly", null, "PT4M53S", ["Pink Floyd"])];
+        fake.Search["Rush Tom Sawyer"] = [new("300", "Tom Sawyer", null, "PT4M33S", ["Rush"])];
+        var floyd = Video(nas, "Pink Floyd - Learning To Fly.mkv", 292.4);
+        var rush = Video(nas, "Rush - Tom Sawyer.mkv", 273);
+        await builder.RunAsync([floyd, rush], CancellationToken.None);
+        Assert.Equal("100,300", string.Join(",", fake.Added.OrderBy(x => x)));
+        fake.Added.Add("999"); // a song you added yourself
+
+        // The Rush video is gone from the library: its track leaves the playlist, yours stays.
+        var s = await builder.RunAsync([floyd], CancellationToken.None);
+        Assert.Equal(1, s.Removed);
+        Assert.Equal("100,999", string.Join(",", fake.Added.OrderBy(x => x)));
     }
 }

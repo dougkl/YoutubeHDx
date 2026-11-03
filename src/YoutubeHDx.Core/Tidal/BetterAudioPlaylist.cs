@@ -15,10 +15,11 @@ public sealed record TidalMatch(string Path, string Status, double VideoSeconds,
     public double Diff => TidalSeconds > 0 ? Math.Abs(TidalSeconds - VideoSeconds) : 0;
 }
 
-public sealed record PlaylistSummary(int Checked, int Matched, int Added, int LengthDiffers, int NotFound, string? PlaylistId)
+public sealed record PlaylistSummary(int Checked, int Matched, int Added, int LengthDiffers, int NotFound, string? PlaylistId, int Removed = 0)
 {
     public string Describe() =>
-        $"{Matched} songs in the playlist ({Added} new), {LengthDiffers} found but with a different length, {NotFound} not found on TIDAL";
+        $"{Matched} songs match ({Added} added" + (Removed > 0 ? $", {Removed} taken out" : "") +
+        $"), {LengthDiffers} found but with a different length, {NotFound} not found on TIDAL";
 }
 
 /// <summary>
@@ -35,6 +36,9 @@ public sealed partial class BetterAudioPlaylist
     public const string ActivityKey = "4-tidal";
     public const string ActivityName = "TIDAL better-audio playlist";
     private static readonly TimeSpan Recheck = TimeSpan.FromDays(30);
+
+    /// <summary>Bumped when the matching rules get stricter: earlier matches are then looked up again.</summary>
+    public const int RulesVersion = 2;
 
     private readonly Func<AppSettings> _settings;
     private readonly TidalApi _api;
@@ -57,6 +61,13 @@ public sealed partial class BetterAudioPlaylist
     private sealed class State
     {
         public string? PlaylistId { get; set; }
+        public int RulesVersion { get; set; }
+
+        /// <summary>Tracks this app put in the playlist (only those are ever taken out again).</summary>
+        public HashSet<string> OurTracks { get; set; } = new();
+
+        /// <summary>Tracks you removed from the playlist yourself: never added again.</summary>
+        public HashSet<string> RemovedByYou { get; set; } = new();
         public Dictionary<string, TidalMatch> Results { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
@@ -66,13 +77,24 @@ public sealed partial class BetterAudioPlaylist
         Board?.Start(ActivityKey, ActivityName, videos.Count);
         try
         {
+            var fresh = false;
             if (state.PlaylistId is null || !await _api.PlaylistExistsAsync(state.PlaylistId, ct).ConfigureAwait(false))
             {
                 state.PlaylistId = await _api.CreatePlaylistAsync(PlaylistName,
                     "Songs from my music-video library whose TIDAL track has the same length as the video (within 2 s). Kept up to date by YoutubeHDx.",
                     ct).ConfigureAwait(false);
-                foreach (var k in state.Results.Keys.ToList()) state.Results[k] = state.Results[k] with { Added = false };
+                state.OurTracks.Clear();
+                state.RemovedByYou.Clear();
+                fresh = true;
                 _log($"TIDAL: created playlist {state.PlaylistId}");
+            }
+            var adoptPresent = !fresh && state.RulesVersion == 0 && state.OurTracks.Count == 0; // made by version 1.8.0-pre: all ours
+            if (state.RulesVersion < RulesVersion)
+            {
+                // Stricter rules: look up every earlier match again (only matches can change).
+                foreach (var k in state.Results.Keys.ToList())
+                    if (state.Results[k].Status == "match") state.Results[k] = state.Results[k] with { Status = "recheck", CheckedAt = DateTimeOffset.MinValue };
+                state.RulesVersion = RulesVersion;
             }
 
             var done = 0;
@@ -99,23 +121,31 @@ public sealed partial class BetterAudioPlaylist
             var present = videos.Select(v => v.Path).ToHashSet(StringComparer.OrdinalIgnoreCase);
             foreach (var gone in state.Results.Keys.Where(k => !present.Contains(k)).ToList()) state.Results.Remove(gone);
 
-            var toAdd = state.Results.Values.Where(r => r is { Status: "match", Added: false, TrackId: not null })
-                .GroupBy(r => r.TrackId).Select(g => g.First()).ToList();
-            if (toAdd.Count > 0)
+            // Make the playlist match: add what's missing, take out what we added that no longer matches.
+            Board?.Progress(ActivityKey, videos.Count - 1, "Updating the playlist");
+            var wanted = state.Results.Values.Where(r => r is { Status: "match", TrackId: not null }).Select(r => r.TrackId!).ToHashSet();
+            var inPlaylist = fresh ? new List<TidalApi.PlaylistItem>() : (await _api.GetPlaylistItemsAsync(state.PlaylistId!, ct).ConfigureAwait(false)).ToList();
+            var presentIds = inPlaylist.Select(p => p.TrackId).ToHashSet();
+            if (adoptPresent) state.OurTracks.UnionWith(presentIds);
+            foreach (var gone in state.OurTracks.Where(id => !presentIds.Contains(id) && wanted.Contains(id)).ToList())
             {
-                Board?.Progress(ActivityKey, videos.Count - 1, $"Adding {toAdd.Count} songs to the playlist");
-                await _api.AddTracksAsync(state.PlaylistId!, toAdd.Select(r => r.TrackId!).ToList(), ct).ConfigureAwait(false);
-                var addedIds = toAdd.Select(r => r.TrackId).ToHashSet();
-                foreach (var k in state.Results.Keys.ToList())
-                    if (state.Results[k].TrackId is { } id && addedIds.Contains(id) && state.Results[k].Status == "match")
-                        state.Results[k] = state.Results[k] with { Added = true };
+                state.RemovedByYou.Add(gone); // we put it there and it's gone: you took it out
+                state.OurTracks.Remove(gone);
             }
+            var toAdd = wanted.Where(id => !presentIds.Contains(id) && !state.RemovedByYou.Contains(id)).ToList();
+            var toRemove = inPlaylist.Where(p => state.OurTracks.Contains(p.TrackId) && !wanted.Contains(p.TrackId)).ToList();
+            if (toAdd.Count > 0) await _api.AddTracksAsync(state.PlaylistId!, toAdd, ct).ConfigureAwait(false);
+            if (toRemove.Count > 0) await _api.RemoveItemsAsync(state.PlaylistId!, toRemove, ct).ConfigureAwait(false);
+            state.OurTracks.UnionWith(toAdd);
+            state.OurTracks.ExceptWith(toRemove.Select(r => r.TrackId));
+            foreach (var k in state.Results.Keys.ToList())
+                if (state.Results[k] is { Status: "match", TrackId: { } id }) state.Results[k] = state.Results[k] with { Added = state.OurTracks.Contains(id) || presentIds.Contains(id) };
             Save(state);
             WriteCsv(state);
 
             var all = state.Results.Values.ToList();
             var summary = new PlaylistSummary(videos.Count, all.Count(r => r.Status == "match"), toAdd.Count,
-                all.Count(r => r.Status == "length"), all.Count(r => r.Status is "notfound" or "noartist"), state.PlaylistId);
+                all.Count(r => r.Status == "length"), all.Count(r => r.Status is "notfound" or "noartist"), state.PlaylistId, toRemove.Count);
             Board?.Finish(ActivityKey, ActivityName, $"Last update {DateTimeOffset.Now:MMM d HH:mm}: {summary.Describe()}");
             _log($"TIDAL playlist: {summary.Describe()}");
             return summary;
@@ -199,7 +229,11 @@ public sealed partial class BetterAudioPlaylist
         try
         {
             if (File.Exists(StateFile) && JsonSerializer.Deserialize<State>(File.ReadAllText(StateFile), Json.Options) is { } s)
-                return new State { PlaylistId = s.PlaylistId, Results = new(s.Results, StringComparer.OrdinalIgnoreCase) };
+                return new State
+                {
+                    PlaylistId = s.PlaylistId, RulesVersion = s.RulesVersion, OurTracks = s.OurTracks, RemovedByYou = s.RemovedByYou,
+                    Results = new(s.Results, StringComparer.OrdinalIgnoreCase),
+                };
         }
         catch (Exception e) when (e is IOException or JsonException) { }
         return new State();

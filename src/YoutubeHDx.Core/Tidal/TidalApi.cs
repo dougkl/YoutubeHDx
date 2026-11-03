@@ -97,6 +97,41 @@ public sealed class TidalApi
         catch (TidalApiException e) when (e.Status == HttpStatusCode.NotFound) { return false; }
     }
 
+    public sealed record PlaylistItem(string TrackId, string ItemId);
+
+    /// <summary>The tracks in a playlist, with the item ids needed to remove them.</summary>
+    public async Task<IReadOnlyList<PlaylistItem>> GetPlaylistItemsAsync(string playlistId, CancellationToken ct)
+    {
+        var items = new List<PlaylistItem>();
+        string? path = $"/playlists/{Uri.EscapeDataString(playlistId)}/relationships/items?countryCode={_country}";
+        for (var page = 0; path is not null && page < 200; page++)
+        {
+            using var doc = await SendAsync(HttpMethod.Get, path, null, ct).ConfigureAwait(false);
+            foreach (var d in Items(doc.RootElement, "data"))
+                if (d.TryGetProperty("type", out var t) && t.GetString() == "tracks" &&
+                    d.TryGetProperty("meta", out var m) && m.TryGetProperty("itemId", out var item))
+                    items.Add(new PlaylistItem(d.GetProperty("id").GetString()!, item.GetString()!));
+            path = doc.RootElement.TryGetProperty("links", out var links) && links.TryGetProperty("next", out var next) &&
+                   next.GetString() is { Length: > 0 } n
+                ? (n.StartsWith("http", StringComparison.Ordinal) ? n[BaseUrl.Length..] : n)
+                : null;
+        }
+        return items;
+    }
+
+    /// <summary>Removes items (by their item ids) from a playlist, 50 per call.</summary>
+    public async Task RemoveItemsAsync(string playlistId, IReadOnlyList<PlaylistItem> items, CancellationToken ct)
+    {
+        foreach (var chunk in items.Chunk(50))
+        {
+            var body = JsonSerializer.Serialize(new
+            {
+                data = chunk.Select(i => new { id = i.TrackId, type = "tracks", meta = new { itemId = i.ItemId } }).ToArray(),
+            });
+            using var _ = await SendAsync(HttpMethod.Delete, $"/playlists/{Uri.EscapeDataString(playlistId)}/relationships/items", body, ct).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>Adds tracks (50 per call); tracks already in the playlist are skipped.</summary>
     public async Task AddTracksAsync(string playlistId, IReadOnlyList<string> trackIds, CancellationToken ct)
     {
