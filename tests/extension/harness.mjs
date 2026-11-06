@@ -407,7 +407,7 @@ export function loadBackground({ cookies = [], nativeReply = { ok: true, message
 
 /** tidal.js as a module-like object. */
 export function loadTidal() {
-  const ctx = vm.createContext({ TextEncoder, btoa, crypto: globalThis.crypto, URL });
-  vm.runInContext(playerSource('tidal.js') + '\n;globalThis.__x = { yhdxSongParse, yhdxTidalSameSong, yhdxTidalPick, yhdxIsoSeconds, yhdxTidalSearch, yhdxTidalFind, yhdxSyncStep, yhdxPkce, yhdxTidalAuthorizeUrl, yhdxSongNorm };', ctx);
+  const ctx = vm.createContext({ TextEncoder, btoa, crypto: globalThis.crypto, URL, URLSearchParams });
+  vm.runInContext(playerSource('tidal.js') + '\n;globalThis.__x = { yhdxSongParse, yhdxTidalSameSong, yhdxTidalPick, yhdxIsoSeconds, yhdxTidalSearch, yhdxTidalFind, yhdxTidalPresentation, yhdxTidalFindPlayable, yhdxSyncStep, yhdxPkce, yhdxTidalAuthorizeUrl, yhdxSongNorm };', ctx);
   return ctx.__x;
 }

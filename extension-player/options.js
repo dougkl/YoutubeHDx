@@ -75,7 +75,7 @@ async function tidalState() {
   const st = await chrome.runtime.sendMessage({ type: 'tidal-status' });
   $('tidalRedirect').textContent = st?.redirectUri ?? '';
   if (!$('tidalClientId').value) $('tidalClientId').value = st?.clientId ?? '';
-  $('tidalState').textContent = st?.signedIn ? (st.previewOnly ? 'Signed in, but TIDAL gives this app 30-second previews only, so videos keep YouTube\'s sound (checked again daily).' : 'Signed in to TIDAL.') : st?.clientId ? 'Not signed in.' : 'Enter the Client ID, Save, then sign in.';
+  $('tidalState').textContent = st?.signedIn ? 'Signed in to TIDAL.' : st?.clientId ? 'Not signed in.' : 'Enter the Client ID, Save, then sign in.';
 }
 $('tidalSignIn').onclick = async () => {
   const clientId = $('tidalClientId').value.trim();

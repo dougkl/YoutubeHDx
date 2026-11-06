@@ -193,8 +193,11 @@
   pointer-events: none; }
 .yhdx-hq { position: absolute; left: 16px; bottom: 64px; z-index: 69; padding: 6px 12px; border-radius: 16px;
   background: rgba(0,0,0,.55); color: #fff; font: 500 13px Roboto, Arial, sans-serif; pointer-events: none;
-  opacity: 0; transition: opacity 1.2s ease; }
-.yhdx-hq.yhdx-show { opacity: .85; }`;
+  opacity: 0; transition: opacity 1.2s ease, bottom .25s ease, padding .6s ease, font-size .6s ease; white-space: nowrap; }
+.yhdx-hq.yhdx-show { opacity: .85; }
+.yhdx-hq.yhdx-mini { opacity: .5; padding: 3px 9px; font-size: 11px; }
+.ytp-autohide .yhdx-hq { bottom: 14px; }
+.ad-showing .yhdx-hq { display: none; }`;
 
   function ensureUiStyle() {
     if (ui.style) return;
@@ -373,18 +376,18 @@
 
   const AUDIO_CLOCK_MS = 250;
   let audio = { videoId: null, requested: null, track: null, status: 'idle', mutedByUs: false, timer: null, video: null,
-                listeners: null, quality: null, previewOnly: false, signInHintShown: false };
+                listeners: null, quality: null, signInHintShown: false };
 
   const videoElement = (p) => p?.querySelector?.('video.html5-main-video') ?? p?.querySelector?.('video') ?? null;
   const isAd = (p) => p?.classList?.contains('ad-showing');
 
   function audioEligible() {
-    return settings?.tidalAudio && !audio.previewOnly && state.prefs && state.prefs.audio !== 'youtube';
+    return settings?.tidalAudio && state.prefs && state.prefs.audio !== 'youtube';
   }
 
   /** Called from tick(): once per video, ask whether TIDAL has the same recording. True when nothing more to do. */
   function requestAudio(p) {
-    if (!settings?.tidalAudio || audio.previewOnly) return true;
+    if (!settings?.tidalAudio) return true;
     if (!state.prefs) return false;
     const vd = p.getVideoData?.() || {};
     if (!vd.video_id || audio.requested === vd.video_id) return true;
@@ -403,8 +406,7 @@
     const p = getPlayer();
     if (data.videoId !== audio.videoId || data.videoId !== p?.getVideoData?.()?.video_id || audio.status !== 'finding') return;
     if (!data.track) {
-      audio.status = 'none';
-      if (data.previewOnly) audio.previewOnly = true;
+      audio.status = data.preview ? 'preview' : 'none'; // a preview-only song keeps YouTube's sound, nothing to say
       if (data.signedOut && !audio.signInHintShown) {
         audio.signInHintShown = true;
         toast('TIDAL audio: sign in to TIDAL in the YoutubeHDx Player settings');
@@ -439,9 +441,8 @@
         }
         break;
       case 'preview':
-        audio.previewOnly = true; // TIDAL only gives this app previews: don't try again on every video
-        audioStop();
-        if (!data.known) toast('TIDAL only plays previews for this app, so the video keeps YouTube\'s sound');
+        audioStop(); // rare now (checked before muting): this song keeps YouTube's sound
+        audio.status = 'preview';
         break;
       case 'revoked':
         audioStop();
@@ -533,8 +534,12 @@
     p.appendChild(el);
     ui.hq = el;
     setTimeout(() => el.classList?.add('yhdx-show'), 30);
-    ui.hqTimer = setTimeout(() => el.classList?.remove('yhdx-show'), 5000);
-    setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 7000);
+    // After 5 s it shrinks to a small faded "♪ TIDAL" that stays in the corner as long as TIDAL's sound plays.
+    ui.hqTimer = setTimeout(() => {
+      if (ui.hq !== el) return;
+      el.textContent = `♪ TIDAL${q ? ` ${q}` : ''}`;
+      el.classList?.add('yhdx-mini');
+    }, 5000);
   }
 
   function hideHqBadge() {
@@ -551,6 +556,7 @@
         (offset ? ` · ${offset > 0 ? '+' : ''}${offset.toFixed(2)} s` : '');
     }
     if (state.prefs?.audio === 'youtube') return "Audio: YouTube's sound (your choice for this video)";
+    if (audio.status === 'preview') return "Audio: YouTube's sound (TIDAL has only a 30-second preview of this song)";
     return '';
   }
 

@@ -46,7 +46,7 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 0);
   });
 
-  test('match: loads TIDAL, mutes YouTube once TIDAL is ready, shows the faded sign bottom-left', () => {
+  test('match: loads TIDAL, mutes YouTube once TIDAL is ready, shows the sign bottom-left and keeps a small one there', () => {
     const page = watch();
     page.sendTidalMatch('vid1', TRACK);
     const load = audioMsgs(page, 'load')[0];
@@ -61,7 +61,14 @@ describe('TIDAL audio for music videos', () => {
     advance(100);
     assert.ok(sign.classList.contains('yhdx-show'));        // fades in
     advance(5000);
-    assert.ok(!sign.classList.contains('yhdx-show'));       // and out
+    assert.ok(sign.classList.contains('yhdx-mini'));        // then shrinks to a small faded label…
+    assert.equal(sign.textContent, '♪ TIDAL Hi-Res');
+    advance(60000);
+    assert.equal(page.inPlayer('yhdx-hq')[0], sign);       // …that stays as long as TIDAL's sound plays
+    page.player.videoId = 'vid2';
+    page.fireWindow('yt-navigate-finish');
+    advance(600);
+    assert.equal(page.inPlayer('yhdx-hq').length, 0);      // gone with TIDAL's sound
   });
 
   test('sends the video clock: time, playing, speed, volume and your offset', () => {
@@ -136,31 +143,35 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.player.video.muted, false);
   });
 
-  test('TIDAL only gives previews: back to YouTube sound, and no more tries this session', () => {
+  test('song with only a TIDAL preview: keeps YouTube sound quietly, the next song still tries TIDAL', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { preview: true, reason: 'TIDAL has only a 30-second preview of this song' });
+    assert.equal(audioMsgs(page, 'load').length, 0);
+    assert.equal(page.player.video.muted, false);
+    assert.equal(page.toastText(), undefined);
+    assert.equal(page.inPlayer('yhdx-hq').length, 0);
+    page.player.videoId = 'vid2';
+    page.fireWindow('yt-navigate-finish');
+    advance(1500);
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
+    page.sendTidalMatch('vid2', TRACK);
+    page.sendAudioStatus('loaded', { trackId: TRACK.id });
+    page.sendAudioStatus('playing', { trackId: TRACK.id, quality: 'LOSSLESS' });
+    assert.equal(page.player.video.muted, true);
+    assert.equal(page.inPlayer('yhdx-hq').length, 1);
+  });
+
+  test('TIDAL turns out to give only a preview while loading: back to YouTube sound for that song only', () => {
     const page = watch();
     page.sendTidalMatch('vid1', TRACK);
     page.sendAudioStatus('loaded', { trackId: TRACK.id });
     page.sendAudioStatus('preview', { trackId: TRACK.id });
     assert.equal(page.player.video.muted, false);
-    assert.match(page.toastText(), /previews/);
+    assert.equal(page.toastText(), undefined);
     page.player.videoId = 'vid2';
     page.fireWindow('yt-navigate-finish');
     advance(1500);
-    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 1);
-  });
-
-  test('previews only, already known (from another day or tab): quietly keeps YouTube sound', () => {
-    const page = watch();
-    page.sendTidalMatch('vid1', null, { previewOnly: true, reason: 'TIDAL plays previews only for this app' });
-    assert.equal(audioMsgs(page, 'load').length, 0);
-    assert.equal(page.player.video.muted, false);
-    assert.equal(page.toastText(), undefined);
-    const again = watch();
-    again.sendTidalMatch('vid1', TRACK);
-    again.sendAudioStatus('loaded', { trackId: TRACK.id });
-    again.sendAudioStatus('preview', { trackId: TRACK.id, known: true }); // the daily re-check: still previews
-    assert.equal(again.player.video.muted, false);
-    assert.equal(again.toastText(), undefined);
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
   });
 
   test('another video: TIDAL stops and YouTube sound comes back', () => {
@@ -310,28 +321,41 @@ describe('service worker: TIDAL', () => {
     assert.equal(restarted.sentToRuntime.filter((m) => m.cmd === 'clock' && m.tabId === 5).length, 1);
   });
 
-  test('previews only: remembered for every tab, looked at again after a day, cleared when full tracks play', async () => {
-    let now = Date.now();
-    const calls = [];
-    const bg = loadPlayerBackground({ fetchFn: async (u) => { calls.push(u); return new Response('{"data":[]}'); }, now: () => now });
-    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: now + 3600e3, userId: '175' };
-    await bg.send({ type: 'tidal-audio-status', status: 'preview', tabId: 5, trackId: '9', reason: 'FULL_REQUIRES_HIGHER_ACCESS_TIER' });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(bg.sentToTabs.at(-1)[1].known, false, 'first time: the tab tells you');
-    const r = await bg.send({ type: 'tidal-match', videoId: 'abcdef123', title: 'A - B', author: 'A', duration: 200 });
-    assert.equal(r.previewOnly, true);
-    assert.equal(calls.length, 0, 'no TIDAL search while previews only');
-    assert.equal((await bg.send({ type: 'tidal-status' })).previewOnly, true);
-    await bg.send({ type: 'tidal-audio-status', status: 'preview', tabId: 5, trackId: '9' });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(bg.sentToTabs.at(-1)[1].known, true, 'already known: no second message');
-    bg.local.tidalPreviewOnly.at -= 25 * 3600e3; // a day later: try again
-    const later = await bg.send({ type: 'tidal-match', videoId: 'abcdef124', title: 'A - B', author: 'A', duration: 200 });
-    assert.notEqual(later.previewOnly, true);
-    assert.ok(calls.length > 0);
-    await bg.send({ type: 'tidal-audio-status', status: 'playing', tabId: 5, trackId: '9' });
-    await new Promise((r) => setTimeout(r, 10));
-    assert.equal(bg.local.tidalPreviewOnly, undefined, 'full tracks play: forget it');
+  test('asks TIDAL first whether the song plays in full; a preview-only song tries one other recording, then is remembered for 3 days', async () => {
+    const twoTracks = { data: [
+      { id: '9', attributes: { title: 'Angels', duration: 'PT4M24S' }, relationships: { artists: { data: [{ id: 'r' }] } } },
+      { id: '10', attributes: { title: 'Angels', duration: 'PT4M25S' }, relationships: { artists: { data: [{ id: 'r' }] } } }],
+      included: [{ id: 'r', type: 'artists', attributes: { name: 'Robbie Williams' } }] };
+    const run = async (presentations) => {
+      const calls = [];
+      const bg = loadPlayerBackground({ fetchFn: async (url) => {
+        calls.push(url);
+        if (url.includes('searchResults')) return { ok: true, status: 200, json: async () => ({ data: [{ relationships: { tracks: { data: [{ id: '9' }, { id: '10' }] } } }] }) };
+        const m = /trackManifests\/(\d+)/.exec(url);
+        if (m) return { ok: true, status: 200, json: async () => ({ data: { attributes: { trackPresentation: presentations[m[1]] } } }) };
+        return { ok: true, status: 200, json: async () => twoTracks };
+      } });
+      bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3, userId: '175' };
+      return { bg, calls, r: await bg.send(video) };
+    };
+    const full = await run({ 9: 'FULL', 10: 'FULL' });
+    assert.equal(full.r.track.id, '9');
+    assert.match(full.calls.find((u) => u.includes('trackManifests')), /trackManifests\/9\?.*usage=PLAYBACK/);
+
+    const other = await run({ 9: 'PREVIEW', 10: 'FULL' });
+    assert.equal(other.r.track.id, '10', 'the other same-length recording plays in full');
+
+    const none = await run({ 9: 'PREVIEW', 10: 'PREVIEW' });
+    assert.equal(none.r.track, null);
+    assert.equal(none.r.preview, true);
+    const saved = none.bg.local['tidal:vid1abcdefg'];
+    assert.equal(saved.ttl, 3 * 24 * 3600e3);
+    const before = none.calls.length;
+    assert.equal((await none.bg.send(video)).preview, true);
+    assert.equal(none.calls.length, before, 'remembered: no new questions to TIDAL for this song');
+    saved.at -= 4 * 24 * 3600e3;
+    await none.bg.send(video);
+    assert.ok(none.calls.length > before, 'asked again after 3 days');
   });
 
   test('gives the offscreen player its credentials', async () => {

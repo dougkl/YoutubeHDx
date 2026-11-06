@@ -183,6 +183,42 @@ async function yhdxTidalFind({ title, author, duration }, { fetchFn, token, coun
   return { track: null, reason: 'no same-length recording on TIDAL' };
 }
 
+/**
+ * Does TIDAL play this track in full for this app and account, or only a 30-second preview? Asked before YouTube's
+ * sound is muted, so a song that only has a preview simply keeps YouTube's sound. 'FULL' | 'PREVIEW' | null (unknown).
+ */
+async function yhdxTidalPresentation(trackId, { fetchFn, token, country = 'US' }) {
+  if (!/^\d{1,15}$/.test(String(trackId))) return null;
+  const q = new URLSearchParams([['adaptive', 'true'], ['formats', 'FLAC'], ['formats', 'AACLC'], ['manifestType', 'MPEG_DASH'],
+    ['uriScheme', 'HTTPS'], ['usage', 'PLAYBACK'], ['countryCode', country]]);
+  try {
+    const r = await fetchFn(`${YHDX_TIDAL_API}/trackManifests/${trackId}?${q}`,
+      { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.api+json' } });
+    if (!r.ok) return null;
+    const p = (await r.json())?.data?.attributes?.trackPresentation;
+    return p === 'FULL' || p === 'PREVIEW' ? p : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * yhdxTidalFind, then make sure TIDAL plays it in full; if only a preview, try one other same-length recording.
+ * Some songs play in full, some only as a preview: the answer is per song.
+ */
+async function yhdxTidalFindPlayable(video, opts) {
+  const previews = [];
+  let found = null;
+  for (let i = 0; i < 2; i++) {
+    found = await yhdxTidalFind(video, { ...opts, exclude: [...(opts.exclude ?? []), ...previews.map((t) => t.id)] });
+    if (!found.track) break;
+    if ((await yhdxTidalPresentation(found.track.id, opts)) !== 'PREVIEW') return found;
+    previews.push(found.track);
+  }
+  if (previews.length) return { track: null, preview: true, previewTrack: previews[0], reason: 'TIDAL has only a 30-second preview of this song' };
+  return found;
+}
+
 // ---------------------------------------------------------------- keeping the audio in step
 
 /**

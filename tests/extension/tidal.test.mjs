@@ -73,6 +73,15 @@ describe('search through the official API', () => {
     assert.match(urls[0], /countryCode=US&include=tracks/);
   });
 
+  test('asks whether a track plays in full or only as a preview', async () => {
+    const answer = (presentation, ok = true) => async () => ({ ok, status: ok ? 200 : 403, json: async () => ({ data: { attributes: { trackPresentation: presentation } } }) });
+    assert.equal(await T.yhdxTidalPresentation('9', { fetchFn: answer('FULL'), token: 'tok' }), 'FULL');
+    assert.equal(await T.yhdxTidalPresentation('9', { fetchFn: answer('PREVIEW'), token: 'tok' }), 'PREVIEW');
+    assert.equal(await T.yhdxTidalPresentation('9', { fetchFn: answer('FULL', false), token: 'tok' }), null, 'unknown: let the player find out');
+    assert.equal(await T.yhdxTidalPresentation('9', { fetchFn: async () => { throw new Error('offline'); }, token: 'tok' }), null);
+    assert.equal(await T.yhdxTidalPresentation('9/../x', { fetchFn: answer('FULL'), token: 'tok' }), null);
+  });
+
   test('skips tracks you said are wrong', async () => {
     const { fetchFn } = api([
       [/searchResults/, { data: [{ relationships: { tracks: { data: [{ id: '9' }] } } }] }],
