@@ -149,7 +149,10 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(audioMsgs(page, 'load').length, 0);
     assert.equal(page.player.video.muted, false);
     assert.equal(page.toastText(), undefined);
-    assert.equal(page.inPlayer('yhdx-hq').length, 0);
+    const note = page.inPlayer('yhdx-hq')[0];                // says in the corner that TIDAL was tried, and why not
+    assert.equal(note.textContent, "♪ TIDAL: only a 30-second preview of this song · YouTube's sound");
+    advance(8000);
+    assert.equal(page.inPlayer('yhdx-hq').length, 0);       // then goes away
     page.player.videoId = 'vid2';
     page.fireWindow('yt-navigate-finish');
     advance(1500);
@@ -168,10 +171,18 @@ describe('TIDAL audio for music videos', () => {
     page.sendAudioStatus('preview', { trackId: TRACK.id });
     assert.equal(page.player.video.muted, false);
     assert.equal(page.toastText(), undefined);
+    assert.match(page.inPlayer('yhdx-hq')[0].textContent, /only a 30-second preview/);
     page.player.videoId = 'vid2';
     page.fireWindow('yt-navigate-finish');
     advance(1500);
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
+  });
+
+  test('no same-length recording on TIDAL: says so in the corner once', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL' });
+    assert.equal(page.inPlayer('yhdx-hq')[0].textContent, "♪ TIDAL: no same-length recording · YouTube's sound");
+    assert.equal(page.player.video.muted, false);
   });
 
   test('another video: TIDAL stops and YouTube sound comes back', () => {

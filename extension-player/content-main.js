@@ -196,6 +196,7 @@
   opacity: 0; transition: opacity 1.2s ease, bottom .25s ease, padding .6s ease, font-size .6s ease; white-space: nowrap; }
 .yhdx-hq.yhdx-show { opacity: .85; }
 .yhdx-hq.yhdx-mini { opacity: .5; padding: 3px 9px; font-size: 11px; }
+.yhdx-hq.yhdx-note.yhdx-show { opacity: .65; }
 .ytp-autohide .yhdx-hq { bottom: 14px; }
 .ad-showing .yhdx-hq { display: none; }`;
 
@@ -406,10 +407,12 @@
     const p = getPlayer();
     if (data.videoId !== audio.videoId || data.videoId !== p?.getVideoData?.()?.video_id || audio.status !== 'finding') return;
     if (!data.track) {
-      audio.status = data.preview ? 'preview' : 'none'; // a preview-only song keeps YouTube's sound, nothing to say
+      audio.status = data.preview ? 'preview' : 'none';
       if (data.signedOut && !audio.signInHintShown) {
         audio.signInHintShown = true;
         toast('TIDAL audio: sign in to TIDAL in the YoutubeHDx Player settings');
+      } else if (!data.signedOut) {
+        showAudioNote(data.preview ? 'only a 30-second preview of this song' : (data.reason || 'not found'));
       }
       return;
     }
@@ -443,6 +446,7 @@
       case 'preview':
         audioStop(); // rare now (checked before muting): this song keeps YouTube's sound
         audio.status = 'preview';
+        showAudioNote('only a 30-second preview of this song');
         break;
       case 'revoked':
         audioStop();
@@ -540,6 +544,25 @@
       el.textContent = `♪ TIDAL${q ? ` ${q}` : ''}`;
       el.classList?.add('yhdx-mini');
     }, 5000);
+  }
+
+  /** Why this song keeps YouTube's sound, in the same corner for 6 s (so you can see TIDAL was tried). */
+  function showAudioNote(why) {
+    const p = getPlayer();
+    if (!p || audio.noteFor === audio.videoId) return;
+    audio.noteFor = audio.videoId;
+    ensureUiStyle();
+    hideHqBadge();
+    const el = document.createElement('div');
+    el.className = 'yhdx-hq yhdx-note';
+    el.textContent = `♪ TIDAL: ${String(why).replace(/ on TIDAL$/, '')} · YouTube's sound`;
+    p.appendChild(el);
+    ui.hq = el;
+    setTimeout(() => el.classList?.add('yhdx-show'), 30);
+    ui.hqTimer = setTimeout(() => {
+      el.classList?.remove('yhdx-show');
+      setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 1500);
+    }, 6000);
   }
 
   function hideHqBadge() {
