@@ -70,6 +70,7 @@ describe('search through the official API', () => {
     // the video is the plain song: neither the live nor the remix may be used
     const r = await T.yhdxTidalFind({ title: 'Pink Floyd - Learning To Fly (Official Music Video HD)', author: 'Pink Floyd', duration: 292.4 }, { fetchFn, token: 'tok' });
     assert.equal(r.track, null);
+    assert.equal(r.reason, 'song not found on TIDAL', 'only a live version and a remix: not this song');
     assert.match(urls[0], /countryCode=US&include=tracks/);
   });
 
@@ -80,6 +81,20 @@ describe('search through the official API', () => {
     assert.equal(await T.yhdxTidalPresentation('9', { fetchFn: answer('FULL', false), token: 'tok' }), null, 'unknown: let the player find out');
     assert.equal(await T.yhdxTidalPresentation('9', { fetchFn: async () => { throw new Error('offline'); }, token: 'tok' }), null);
     assert.equal(await T.yhdxTidalPresentation('9/../x', { fetchFn: answer('FULL'), token: 'tok' }), null);
+  });
+
+  test('a miss says how long the video is and how long TIDAL\'s versions are', async () => {
+    const { fetchFn } = api([
+      [/searchResults/, { data: [{ relationships: { tracks: { data: [{ id: '1' }, { id: '2' }] } } }] }],
+      [/\/tracks\?/, { data: [
+        { id: '1', attributes: { title: 'Save Tonight', duration: 'PT3M59S' }, relationships: { artists: { data: [{ id: 'e' }] } } },
+        { id: '2', attributes: { title: 'Save Tonight', duration: 'PT3M42S' }, relationships: { artists: { data: [{ id: 'e' }] } } }],
+        included: [{ id: 'e', type: 'artists', attributes: { name: 'Eagle-Eye Cherry' } }] }],
+    ]);
+    const r = await T.yhdxTidalFind({ title: 'Eagle-Eye Cherry - Save Tonight', author: 'Eagle-Eye Cherry', duration: 190.1 }, { fetchFn, token: 'tok' });
+    assert.equal(r.track, null);
+    assert.equal(r.reason, 'no same-length recording on TIDAL');
+    assert.equal(r.lengths, 'video 3:10; TIDAL has 3:42, 3:59');
   });
 
   test('skips tracks you said are wrong', async () => {

@@ -126,7 +126,8 @@ function logMatch(msg, result, remembered) {
     : result.signedOut ? 'not signed in to TIDAL' : 'not used';
   if (result.track) trackTitles.set(String(result.track.id), String(msg.title || ''));
   tidalLog({ video: String(msg.title || msg.videoId || ''), videoId: String(msg.videoId || ''), step: 'match', outcome,
-    track: trackLabel(result.track || result.previewTrack), detail: (remembered ? '(remembered) ' : '') + String(result.reason || '') });
+    track: trackLabel(result.track || result.previewTrack),
+    detail: [remembered ? '(remembered)' : '', result.reason, result.lengths].filter(Boolean).join(' · ') });
 }
 
 function logPlayer(msg) {

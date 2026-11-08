@@ -175,12 +175,17 @@ async function yhdxTidalFind({ title, author, duration }, { fetchFn, token, coun
   if (!video.artist || !video.track) return { track: null, reason: 'no artist and song in the title' };
   if (!(duration > 0)) return { track: null, reason: 'video length unknown' };
   const queries = [...new Set([`${video.artist} ${video.track}`, `${yhdxCleanChannel(author)} ${video.track}`].map((q) => q.trim()).filter(Boolean))];
+  const sameSong = new Set(); // lengths of TIDAL's versions of this song, to explain a miss
   for (const query of queries) {
     const tracks = (await yhdxTidalSearch(query, { fetchFn, token, country })).filter((t) => !exclude.includes(t.id));
     const track = yhdxTidalPick(video, duration, tracks);
     if (track) return { track, query };
+    for (const t of tracks) if (t.seconds > 0 && yhdxTidalSameSong(video, t)) sameSong.add(Math.round(t.seconds));
   }
-  return { track: null, reason: 'no same-length recording on TIDAL' };
+  if (!sameSong.size) return { track: null, reason: 'song not found on TIDAL' };
+  const mmss = (x) => { const s = Math.round(x); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  return { track: null, reason: 'no same-length recording on TIDAL',
+           lengths: `video ${mmss(duration)}; TIDAL has ${[...sameSong].sort((a, b) => a - b).map(mmss).join(', ')}` };
 }
 
 /**
