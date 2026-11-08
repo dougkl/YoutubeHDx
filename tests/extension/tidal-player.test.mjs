@@ -386,6 +386,28 @@ describe('service worker: TIDAL', () => {
     assert.ok(none.calls.length > before, 'asked again after 3 days');
   });
 
+  test('keeps a log of what happened per song, for the settings page only', async () => {
+    const calls = [];
+    const bg = loadPlayerBackground({ fetchFn: fetchFn(calls) });
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3, userId: '175' };
+    await bg.send(video);                                  // found (manifest answer unknown here: treated as playable)
+    await bg.send(video);                                  // remembered
+    await bg.send({ type: 'tidal-audio-status', status: 'playing', tabId: 5, trackId: '9', quality: 'LOSSLESS' });
+    await new Promise((r) => setTimeout(r, 20));
+    const fromYoutube = await bg.send({ type: 'tidal-log' }, { url: 'https://www.youtube.com/watch?v=x', tab: { id: 5 } });
+    assert.equal(fromYoutube, undefined, 'YouTube pages cannot read it');
+    const log = await bg.send({ type: 'tidal-log' }, { url: 'chrome-extension://test/options.html' });
+    assert.equal(log.length, 3);
+    assert.equal(log[2].outcome, 'found, playing TIDAL');
+    assert.match(log[2].track, /Robbie Williams – Angels \[9\]/);
+    assert.match(log[1].detail, /remembered/);
+    assert.equal(log[0].step, 'player');
+    assert.equal(log[0].outcome, 'playing');
+    assert.equal(log[0].video, 'Robbie Williams - Angels');
+    await bg.send({ type: 'tidal-log-clear' }, { url: 'chrome-extension://test/options.html' });
+    assert.equal(bg.local.tidalLog, undefined);
+  });
+
   test('gives the offscreen player its credentials', async () => {
     const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
     bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3, userId: '175' };

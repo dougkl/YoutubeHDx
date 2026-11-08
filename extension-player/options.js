@@ -86,3 +86,26 @@ $('tidalSignIn').onclick = async () => {
 };
 $('tidalSignOut').onclick = async () => { await chrome.runtime.sendMessage({ type: 'tidal-signout' }); tidalState(); };
 chrome.storage.local.get({ tidalClientId: '' }).then((r) => { $('tidalClientId').value = r.tidalClientId; tidalState(); });
+
+// ---------------------------------------------------------------- TIDAL log
+async function tidalLogText() {
+  const [log, st, s] = await Promise.all([
+    chrome.runtime.sendMessage({ type: 'tidal-log' }),
+    chrome.runtime.sendMessage({ type: 'tidal-status' }),
+    chrome.storage.sync.get(YHDX_DEFAULTS),
+  ]);
+  const head = [
+    `YoutubeHDx Player ${chrome.runtime.getManifest().version} · TIDAL audio ${s.tidalAudio ? 'on' : 'OFF'} · ` +
+      `${st?.signedIn ? 'signed in to TIDAL' : 'NOT signed in to TIDAL'} · Client ID ${st?.clientId ? 'set' : 'MISSING'}`,
+  ];
+  const lines = (Array.isArray(log) ? log : []).map((e) => {
+    const when = new Date(e.at).toLocaleString();
+    return `${when} | ${e.video || '?'} | ${e.step}: ${e.outcome}${e.track ? ` | ${e.track}` : ''}${e.detail ? ` | ${e.detail}` : ''}`;
+  });
+  return head.concat(lines.length ? lines : ['(nothing yet: play a music video, then Refresh)']).join('\n');
+}
+async function showTidalLog() { $('tidalLog').textContent = await tidalLogText(); }
+$('tidalLogRefresh').onclick = showTidalLog;
+$('tidalLogCopy').onclick = async () => { await navigator.clipboard.writeText(await tidalLogText()); flash('TIDAL log copied.'); };
+$('tidalLogClear').onclick = async () => { await chrome.runtime.sendMessage({ type: 'tidal-log-clear' }); showTidalLog(); };
+showTidalLog();

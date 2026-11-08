@@ -105,12 +105,49 @@ async function tidalToken() {
   return fresh;
 }
 
+// Only the extension's own pages (settings), not the YouTube content scripts.
+const isExtensionPage = (sender) => String(sender?.url || '').startsWith(chrome.runtime.getURL(''));
+
+// ---------------------------------------------------------------- TIDAL log (settings page: what happened per song)
+const TIDAL_LOG_MAX = 40;
+const trackLabel = (t) => (t ? `${t.artists?.[0] ?? ''} – ${t.title}${t.version ? ` (${t.version})` : ''} [${t.id}]` : '');
+const trackTitles = new Map(); // track id -> video title, so the player's answers can say which song
+
+async function tidalLog(entry) {
+  try {
+    const { tidalLog: log = [] } = await chrome.storage.local.get({ tidalLog: [] });
+    log.unshift({ at: Date.now(), ...entry });
+    await chrome.storage.local.set({ tidalLog: log.slice(0, TIDAL_LOG_MAX) });
+  } catch { /* the log is only a help */ }
+}
+
+function logMatch(msg, result, remembered) {
+  const outcome = result.track ? 'found, playing TIDAL' : result.preview ? 'TIDAL gives only a 30-second preview'
+    : result.signedOut ? 'not signed in to TIDAL' : 'not used';
+  if (result.track) trackTitles.set(String(result.track.id), String(msg.title || ''));
+  tidalLog({ video: String(msg.title || msg.videoId || ''), videoId: String(msg.videoId || ''), step: 'match', outcome,
+    track: trackLabel(result.track || result.previewTrack), detail: (remembered ? '(remembered) ' : '') + String(result.reason || '') });
+}
+
+function logPlayer(msg) {
+  if (!['playing', 'preview', 'error', 'revoked'].includes(msg.status)) return;
+  tidalLog({ video: trackTitles.get(String(msg.trackId)) || '', step: 'player', outcome: String(msg.status),
+    track: msg.trackId ? `[${msg.trackId}]` : '', detail: [msg.quality, msg.message].filter(Boolean).join(' ') });
+}
+
 async function tidalMatch(msg) {
+  const result = await tidalMatchInner(msg);
+  logMatch(msg, result, result.remembered);
+  delete result.remembered;
+  return result;
+}
+
+async function tidalMatchInner(msg) {
   if (!/^[\w-]{6,20}$/.test(String(msg.videoId || ''))) return { track: null, reason: 'bad video id' };
   const exclude = (Array.isArray(msg.exclude) ? msg.exclude : []).map(String).slice(0, 20);
   const key = `tidal:${msg.videoId}`;
   const hit = (await chrome.storage.local.get(key))[key];
-  if (hit && Date.now() - hit.at < hit.ttl && !exclude.length) return hit.result;
+  if (hit && Date.now() - hit.at < hit.ttl && !exclude.length) return { ...hit.result, remembered: true };
   const auth = await tidalToken();
   if (!auth) return { track: null, reason: 'not signed in to TIDAL', signedOut: true };
   const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
@@ -184,7 +221,18 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ signedIn: !!s.tidalAuth?.refresh, clientId, redirectUri: chrome.identity.getRedirectURL('tidal') }));
       return true;
     case 'tidal-match':
-      tidalMatch(msg).then(sendResponse, (e) => sendResponse({ track: null, reason: String(e?.message || e), retryable: true, signedOut: e?.status === 401 }));
+      tidalMatch(msg).then(sendResponse, (e) => {
+        tidalLog({ video: String(msg.title || ''), videoId: String(msg.videoId || ''), step: 'match', outcome: 'error', detail: String(e?.message || e) });
+        sendResponse({ track: null, reason: String(e?.message || e), retryable: true, signedOut: e?.status === 401 });
+      });
+      return true;
+    case 'tidal-log':
+      if (!isExtensionPage(sender)) return false;
+      chrome.storage.local.get({ tidalLog: [] }).then((r) => sendResponse(r.tidalLog));
+      return true;
+    case 'tidal-log-clear':
+      if (!isExtensionPage(sender)) return false;
+      chrome.storage.local.remove('tidalLog').then(() => sendResponse({ ok: true }));
       return true;
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
@@ -194,6 +242,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return false;
     case 'tidal-audio-status':
       // From the offscreen player: pass to the tab it plays for.
+      logPlayer(msg);
       if (msg.tabId != null) chrome.tabs.sendMessage(msg.tabId, msg).catch(() => {});
       return false;
     default:

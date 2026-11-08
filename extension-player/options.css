@@ -24,3 +24,5 @@ footer { display: flex; gap: 10px; align-items: center; margin-top: 18px; }
 button { padding: 9px 18px; border: 0; border-radius: 8px; font: inherit; font-weight: 600; color: #fff; background: var(--accent); cursor: pointer; }
 button.secondary { background: var(--panel); border: 1px solid var(--line); color: var(--text); font-weight: 500; }
 #saved { color: #2fbf71; }
+pre.log { max-height: 320px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 ui-monospace, Consolas, monospace;
+  background: rgba(127,127,127,.12); border-radius: 8px; padding: 10px 12px; margin: 8px 0 0; }
