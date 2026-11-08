@@ -185,6 +185,12 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.player.video.muted, false);
   });
 
+  test('page left over from before an update: tells you to reload it', () => {
+    const page = watch();
+    page.fireMessage({ __yhdx: 'stale' });
+    assert.match(page.toastText(), /reload this page/);
+  });
+
   test('another video: TIDAL stops and YouTube sound comes back', () => {
     const page = playingTidal();
     page.player.videoId = 'vid2';
@@ -245,6 +251,17 @@ describe('bridge: TIDAL messages', () => {
     const m = posted.find((x) => x.__yhdx === 'tidal-audio-status');
     assert.equal(m.status, 'playing');
     assert.equal(m.quality, 'LOSSLESS');
+  });
+
+  test('after the Player is updated while YouTube is open: no errors, says once to reload the page', async () => {
+    const posted = await runBridge({});
+    posted.invalidate();
+    const before = posted.length;
+    await posted.receive({ __yhdx: 'prefs-request', videoId: 'vid1abcdefg' });
+    await posted.receive({ __yhdx: 'tidal-match-request', videoId: 'vid1abcdefg', title: 'A - B', author: 'A', duration: 200 });
+    await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid1abcdefg', prefs: { audio: 'youtube' } });
+    const after = posted.slice(before);
+    assert.equal(after.filter((m) => m.__yhdx === 'stale').length, 1);
   });
 
   test('keeps the audio choices per video, cleaned', async () => {

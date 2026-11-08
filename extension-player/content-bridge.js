@@ -2,7 +2,18 @@
 (() => {
   'use strict';
 
+  // After the Player is updated or reloaded, this copy (still running in an already-open tab) is cut off from the
+  // extension: every chrome.* call fails with "Extension context invalidated". Say once that the page needs a reload.
+  let staleTold = false;
+  const alive = () => { try { return !!chrome.runtime?.id; } catch { return false; } };
+  function stale() {
+    if (staleTold) return;
+    staleTold = true;
+    window.postMessage({ __yhdx: 'stale' }, location.origin);
+  }
+
   async function push() {
+    if (!alive()) { stale(); return; }
     const settings = await chrome.storage.sync.get(YHDX_DEFAULTS);
     window.postMessage(
       { __yhdx: 'settings', settings, captionCss: yhdxBuildPageCss(settings) },
@@ -89,19 +100,23 @@
 
   async function sendPrefs(videoId) {
     if (!VIDEO_ID.test(String(videoId))) return;
-    const prefs = (await chrome.storage.local.get(prefsKey(videoId)))[prefsKey(videoId)] ?? {};
+    let prefs = {};
+    try { prefs = (await chrome.storage.local.get(prefsKey(videoId)))[prefsKey(videoId)] ?? {}; } catch { if (!alive()) stale(); }
     window.postMessage({ __yhdx: 'prefs', videoId, prefs }, location.origin);
   }
 
   async function savePrefs(videoId, prefs) {
     if (!VIDEO_ID.test(String(videoId))) return;
     const clean = cleanPrefs(prefs);
-    if (Object.keys(clean).length) await chrome.storage.local.set({ [prefsKey(videoId)]: clean });
-    else await chrome.storage.local.remove(prefsKey(videoId));
+    try {
+      if (Object.keys(clean).length) await chrome.storage.local.set({ [prefsKey(videoId)]: clean });
+      else await chrome.storage.local.remove(prefsKey(videoId));
+    } catch { if (!alive()) stale(); }
   }
 
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data) return;
+    if (typeof e.data.__yhdx === 'string' && e.data.__yhdx.endsWith('-request') && !alive()) { stale(); return; }
     if (e.data.__yhdx === 'ready') push();
     else if (e.data.__yhdx === 'lyrics-request') lyrics(e.data);
     else if (e.data.__yhdx === 'prefs-request') sendPrefs(e.data.videoId);

@@ -856,6 +856,7 @@
     if (e.source !== window || !e.data) return;
     if (e.data.__yhdx === 'lyrics') { onLyrics(e.data); return; }
     if (e.data.__yhdx === 'tidal-match') { onAudioMatch(e.data); return; }
+    if (e.data.__yhdx === 'stale') { toast('YoutubeHDx Player was updated: reload this page (F5) so it works again'); return; }
     if (e.data.__yhdx === 'tidal-audio-status') { onAudioStatus(e.data); return; }
     if (e.data.__yhdx === 'prefs') {
       if (e.data.videoId === state.videoId && !state.prefs) state.prefs = e.data.prefs || {};

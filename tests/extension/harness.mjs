@@ -179,6 +179,7 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
       for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'settings', settings, captionCss } });
     },
     fireWindow(type) { for (const fn of winListeners[type] ?? []) fn({}); },
+    fireMessage(data) { for (const fn of winListeners.message ?? []) fn({ source: window, data }); },
     /** The bridge answering a TIDAL match request. */
     sendTidalMatch(videoId, track, extra = {}) {
       for (const fn of winListeners.message ?? []) fn({ source: window, data: { __yhdx: 'tidal-match', videoId, track, ...extra } });
@@ -336,6 +337,7 @@ export async function runBridge(saved = {}, { lyricsReply = null, onSend = () =>
   const window = { addEventListener: (t, fn) => listeners.push(fn), postMessage: (data) => posted.push(data) };
   const chrome = {
     runtime: {
+      id: 'test-extension',
       sendMessage: async (msg) => { onSend(msg); return reply ? reply(msg) : lyricsReply; },
       onMessage: { addListener: (fn) => runtimeListeners.push(fn) },
     },
@@ -354,6 +356,13 @@ export async function runBridge(saved = {}, { lyricsReply = null, onSend = () =>
   await new Promise((r) => setImmediate(r));
   posted.receive = async (data) => { for (const fn of listeners) fn({ source: window, data }); await new Promise((r) => setImmediate(r)); };
   posted.local = local;
+  // The Player was updated/reloaded while this tab stayed open: chrome.* calls throw from now on.
+  posted.invalidate = () => {
+    delete chrome.runtime.id;
+    const dead = async () => { throw new Error('Extension context invalidated.'); };
+    chrome.runtime.sendMessage = dead;
+    chrome.storage.local.get = dead; chrome.storage.local.set = dead; chrome.storage.local.remove = dead; chrome.storage.sync.get = dead;
+  };
   posted.fromServiceWorker = async (msg) => { for (const fn of runtimeListeners) fn(msg, {}, () => {}); await new Promise((r) => setImmediate(r)); };
   return posted;
 }
