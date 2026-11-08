@@ -468,6 +468,47 @@ describe('service worker: TIDAL', () => {
     assert.equal(r.via, 'web');
   });
 
+  test('TIDAL tab silent until a click: the Player does the click itself (TIDAL\'s own Play, as a user action)', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '134283114', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await wait();
+    const web = bg.tabs.created[0].id;
+    await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '134283114' }, { tab: { id: web }, url: 'https://tidal.com/album/134283113/track/134283114' });
+    await wait();
+    const [attach, evaluate] = bg.dbg.log;
+    assert.deepEqual([...attach], ['attach', web]);
+    assert.equal(evaluate[0], 'Runtime.evaluate');
+    assert.equal(evaluate[2].userGesture, true);
+    assert.match(evaluate[2].expression, /data-track-id="134283114"/);
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 0, 'nothing to ask you');
+    await bg.send({ type: 'tidal-web-status', status: 'loaded', trackId: '134283114' }, { tab: { id: web } });
+    await wait(600);
+    assert.ok(bg.dbg.log.some(([m]) => m === 'detach'), 'lets go of the tab right after');
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'loaded').length, 1);
+    assert.match(bg.local.tidalLog.map((e) => e.outcome).join('|'), /started TIDAL for you/);
+  });
+
+  test('the automatic start is only for messages from a tidal.com page', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 30));
+    await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '9' }, { tab: { id: 5 }, url: 'https://www.youtube.com/watch?v=x' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(bg.dbg.log.length, 0);
+  });
+
+  test('if Chrome refuses the automatic start, the video asks you instead', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.dbg.refuse = true;
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 30));
+    const web = bg.tabs.created[0].id;
+    await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '9' }, { tab: { id: web }, url: 'https://tidal.com/track/9' });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 1);
+  });
+
   test('"click here" brings your TIDAL tab to the front', async () => {
     const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
     bg.tabs.open.push({ id: 77, url: 'https://tidal.com/', windowId: 3 });

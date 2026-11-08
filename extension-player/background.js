@@ -227,6 +227,38 @@ async function tidalWebAudio(msg, tabId) {
   if (msg.cmd === 'stop') { webLoad = null; setAudioTab(null); }
 }
 
+// Chrome keeps your TIDAL tab silent until you click in it. The Player does that one click for you: it runs TIDAL's
+// own Play for this song as a user action, through Chrome's debugger API attached for a moment (Chrome shows a bar
+// "started debugging this browser" while it is). Once is enough for as long as that tab stays open.
+const AUTO_START_WAIT_MS = 5000;
+const autoStart = { tried: new Set(), timer: null };
+
+async function autoStartWebTab(tabId, trackId) {
+  if (!chrome.debugger || !/^\d{1,15}$/.test(String(trackId))) return false;
+  const target = { tabId };
+  try {
+    await chrome.debugger.attach(target, '1.3');
+  } catch {
+    return false;
+  }
+  try {
+    const expression = `(() => {
+      const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
+      const b = row && (row.querySelector('[data-test="play-button"]') || row);
+      if (b) { b.click(); return 'row'; }
+      const f = document.querySelector('[data-test="footer-player"] [data-test="play"]');
+      if (f) { f.click(); return 'footer'; }
+      return 'none';
+    })()`;
+    const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, userGesture: true, returnByValue: true });
+    return r?.result?.value === 'row' || r?.result?.value === 'footer';
+  } catch {
+    return false;
+  } finally {
+    setTimeout(() => chrome.debugger.detach(target).catch(() => {}), 500);
+  }
+}
+
 async function onWebHello(tabId) {
   await sessionSet({ tidalWebTab: tabId });
   if (webLoad && (await sessionGet('tidalAudioVia')) === 'web') chrome.tabs.sendMessage(tabId, webLoad).catch(() => {});
@@ -323,10 +355,27 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return false;
     case 'tidal-web-status':
       // From your TIDAL tab: pass to the YouTube tab it plays for.
-      audioTab().then((tab) => {
+      audioTab().then(async (tab) => {
         const m = { type: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null, quality: msg.quality ?? null, via: 'web' };
-        logPlayer(m);
-        if (tab != null) chrome.tabs.sendMessage(tab, m).catch(() => {});
+        const forward = () => { logPlayer(m); if (tab != null) chrome.tabs.sendMessage(tab, m).catch(() => {}); };
+        if (m.status === 'need-click') {
+          // Do the click for you first; only if TIDAL still isn't playing a few seconds later, ask you.
+          const key = `${sender.tab?.id}:${m.trackId}`;
+          const fromTidal = /^https:\/\/(listen\.)?tidal\.com\//.test(String(sender.url || sender.tab?.url || ''));
+          if (sender.tab?.id != null && fromTidal && !autoStart.tried.has(key)) {
+            autoStart.tried.add(key);
+            if (await autoStartWebTab(sender.tab.id, m.trackId)) {
+              tidalLog({ video: trackTitles.get(String(m.trackId)) || '', step: 'player', outcome: 'started TIDAL for you (no click needed)', track: `[${m.trackId}]` });
+              clearTimeout(autoStart.timer);
+              autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS);
+              return;
+            }
+          }
+          forward();
+          return;
+        }
+        if (m.status === 'loaded' || m.status === 'playing') clearTimeout(autoStart.timer);
+        forward();
       });
       return false;
     case 'tidal-offscreen-ready':

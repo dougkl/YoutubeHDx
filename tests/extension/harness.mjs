@@ -289,6 +289,11 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       update: async (id, o) => { tabs.updated.push([id, o]); const t = tabs.open.find((x) => x.id === id); return t ? { ...t, ...o } : null; },
     },
     windows: { update: async (id) => { windowsFocused.push(id); } },
+    debugger: {
+      attach: async (target) => { if (dbg.refuse) throw new Error('Cannot attach'); dbg.log.push(['attach', target.tabId]); },
+      sendCommand: async (target, method, params) => { dbg.log.push([method, target.tabId, params]); return { result: { value: dbg.answer } }; },
+      detach: async (target) => { dbg.log.push(['detach', target.tabId]); },
+    },
     offscreen: {
       hasDocument: async () => offscreen.open,
       // the page loads and says it's ready, like the real offscreen.js
@@ -315,6 +320,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
   const offscreen = { open: false, created: [] };
   const tabs = { open: [], created: [], removed: [], updated: [] };
   const windowsFocused = [];
+  const dbg = { log: [], answer: 'row', refuse: false };
   let identity = async () => { throw new Error('no sign-in in this test'); };
   const ctx = vm.createContext({
     chrome, URL, URLSearchParams, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
@@ -333,6 +339,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     offscreen,
     tabs,
     windowsFocused,
+    dbg,
     closeTab: async (id) => { tabs.open = tabs.open.filter((t) => t.id !== id); for (const fn of tabs.removed) await fn(id); },
     sentToRuntime,
     sentToTabs,

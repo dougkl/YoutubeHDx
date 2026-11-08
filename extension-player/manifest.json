@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "YoutubeHDx Player",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvlvYysB3v2/eRK4pOoAAsywsekwJrunG5oC/pyLMbfpnZugEyl6ZR2lMi5OyiKkUKjRUDFp7iY3N2DoNvcRAMknx/KR8NN6MC+txeHfxFLiorZngHmao8+PrpFGi8Q7DrOufGbnLRVomqlL4eY9bzLksFvXXOSt0jyXx7iNDcEuuWL5kN5TL2yd0xD0JT3AQIlF3FWKjzAPJD5e7XQX6d8jcRmUSKyhlL5ohdcJNQ80A5sug4ItiGnKbcj0lcrdOg7c4IN78RWzcYCERCVQJdbMTz2ylaIu1LKqVk19pr5t9kwlbKHwmEv3fxKwmHJlKc1qerwMX2Yn/TNo5h0yGdQIDAQAB",
   "description": "Always 4K and clean English captions (never auto-generated) on YouTube, with your caption style; TIDAL's audio for music videos (in sync, through your TIDAL tab) when it has the same recording.",
   "minimum_chrome_version": "111",
   "permissions": [
     "storage",
     "identity",
-    "offscreen"
+    "offscreen",
+    "debugger"
   ],
   "background": {
     "service_worker": "background.js"

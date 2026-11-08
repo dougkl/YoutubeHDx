@@ -2,6 +2,7 @@
 import { test, describe, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { FakePlayer, createYoutubePage, loadBackground, loadDefaults, readManifest, runBridge } from './harness.mjs';
+import { readFileSync } from 'node:fs';
 
 const { YHDX_DEFAULTS, yhdxBuildCaptionCss, yhdxHexToRgba, yhdxBuildHideCss, yhdxBuildPageCss } = loadDefaults();
 /** Advances the mock clock in small steps so chained setTimeout retries all run. */
@@ -607,7 +608,12 @@ describe('extension split', () => {
   const downloader = readManifest('downloader');
 
   test('player never gets cookies or native messaging; only lyrics sites and TIDAL besides YouTube', () => {
-    assert.deepEqual(player.permissions, ['storage', 'identity', 'offscreen']);
+    assert.deepEqual(player.permissions, ['storage', 'identity', 'offscreen', 'debugger']);
+    // debugger: only to press TIDAL's own Play once in your TIDAL tab (Chrome keeps that tab silent until a click),
+    // only for a message from a tidal.com page, attached for a moment.
+    const bgSrc = readFileSync(new URL('../../extension-player/background.js', import.meta.url), 'utf8');
+    assert.equal((bgSrc.match(/chrome\.debugger\.attach/g) || []).length, 1);
+    assert.match(bgSrc, /const fromTidal = \/\^https:/);
     // Fixed key: the TIDAL sign-in redirect (https://<id>.chromiumapp.org/tidal) needs a stable extension id.
     assert.ok(player.key && player.key.length > 300);
     assert.notEqual(player.key, downloader.key);
