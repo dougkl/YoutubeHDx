@@ -125,6 +125,7 @@
     else if (e.data.__yhdx === 'prefs-save') savePrefs(e.data.videoId, e.data.prefs);
     else if (e.data.__yhdx === 'tidal-match-request') tidalMatch(e.data);
     else if (e.data.__yhdx === 'tidal-audio') tidalAudio(e.data);
+    else if (e.data.__yhdx === 'tidal-focus') chrome.runtime.sendMessage({ type: 'tidal-focus' }).catch(() => {});
   });
   chrome.storage.onChanged.addListener((_changes, area) => { if (area === 'sync') push(); });
   push();

@@ -191,6 +191,22 @@ describe('TIDAL audio for music videos', () => {
     assert.match(page.toastText(), /reload this page/);
   });
 
+  test('TIDAL tab blocked by Chrome: the note stays, clicking it asks for the TIDAL tab, and goes away once TIDAL plays', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', TRACK);
+    page.sendAudioStatus('need-click', { trackId: TRACK.id });
+    const note = page.inPlayer('yhdx-click')[0];
+    assert.match(note.textContent, /click here, then Play in the TIDAL tab/);
+    advance(30000);
+    assert.equal(page.inPlayer('yhdx-click')[0], note, 'stays until TIDAL plays');
+    assert.equal(page.player.video.muted, false, "YouTube's sound until then");
+    note.click();
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-focus').length, 1);
+    page.sendAudioStatus('loaded', { trackId: TRACK.id });
+    assert.equal(page.inPlayer('yhdx-click').length, 0);
+    assert.equal(page.player.video.muted, true);
+  });
+
   test('another video: TIDAL stops and YouTube sound comes back', () => {
     const page = playingTidal();
     page.player.videoId = 'vid2';
@@ -450,6 +466,19 @@ describe('service worker: TIDAL', () => {
     const r = await bg.send(video);
     assert.equal(r.track.id, '11009839');
     assert.equal(r.via, 'web');
+  });
+
+  test('"click here" brings your TIDAL tab to the front', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.tabs.open.push({ id: 77, url: 'https://tidal.com/', windowId: 3 });
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 30));
+    await bg.send({ type: 'tidal-focus' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 30));
+    const [id, opts] = bg.tabs.updated.at(-1);
+    assert.equal(id, 77);
+    assert.equal(opts.active, true);
+    assert.equal(bg.windowsFocused.at(-1), 3);
   });
 
   test('uses a TIDAL tab you already have open instead of opening one', async () => {

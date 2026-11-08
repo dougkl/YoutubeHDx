@@ -310,6 +310,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
       return false;
+    case 'tidal-focus':
+      // "click here" on the video: bring your TIDAL tab to the front so you can press Play there once.
+      webTab().then(async (id) => {
+        if (id == null) return;
+        const tab = await chrome.tabs.update(id, { active: true }).catch(() => null);
+        if (tab?.windowId != null) chrome.windows?.update(tab.windowId, { focused: true }).catch(() => {});
+      });
+      return false;
     case 'tidal-web-hello':
       if (sender.tab?.id != null) onWebHello(sender.tab.id);
       return false;

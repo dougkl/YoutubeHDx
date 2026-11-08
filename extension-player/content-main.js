@@ -197,6 +197,8 @@
 .yhdx-hq.yhdx-show { opacity: .85; }
 .yhdx-hq.yhdx-mini { opacity: .5; padding: 3px 9px; font-size: 11px; }
 .yhdx-hq.yhdx-note.yhdx-show { opacity: .65; }
+.yhdx-hq.yhdx-click { pointer-events: auto; cursor: pointer; opacity: .9; }
+.yhdx-hq.yhdx-click:hover { opacity: 1; background: rgba(0,0,0,.75); }
 .ytp-autohide .yhdx-hq { bottom: 14px; }
 .ad-showing .yhdx-hq { display: none; }`;
 
@@ -432,6 +434,7 @@
     }
     switch (data.status) {
       case 'loaded':
+        if (ui.hq?.classList?.contains('yhdx-click')) hideHqBadge();
         if (audio.status === 'loading') audio.status = 'ready'; // TIDAL is ready: YouTube's sound goes off
         if (!isAd(getPlayer())) muteYoutube(true);
         break;
@@ -457,8 +460,9 @@
         audioStop(false);
         break;
       case 'need-click':
-        // Your TIDAL tab may only play sound after you've clicked in it once (Chrome's rule); YouTube's sound until then.
-        showAudioNote('click Play once in your TIDAL tab to let it play here');
+        // Chrome blocked the TIDAL tab's sound until you click in it (the Player installer normally allows tidal.com):
+        // YouTube's sound until then; the note stays, and clicking it takes you to the TIDAL tab.
+        showNeedClick();
         break;
       case 'error':
         audioStop();
@@ -568,6 +572,23 @@
       el.classList?.remove('yhdx-show');
       setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 1500);
     }, 6000);
+  }
+
+  function showNeedClick() {
+    const p = getPlayer();
+    if (!p) return;
+    ensureUiStyle();
+    hideHqBadge();
+    const el = document.createElement('div');
+    el.className = 'yhdx-hq yhdx-note yhdx-click yhdx-show';
+    el.setAttribute('role', 'button');
+    el.textContent = "♪ TIDAL is ready: click here, then Play in the TIDAL tab · YouTube's sound until then";
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.postMessage({ __yhdx: 'tidal-focus' }, location.origin);
+    });
+    p.appendChild(el);
+    ui.hq = el;
   }
 
   function hideHqBadge() {

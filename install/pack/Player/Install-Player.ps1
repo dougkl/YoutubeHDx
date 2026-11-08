@@ -4,7 +4,9 @@
   human-made only, and your caption style. No downloader, no login, nothing else runs on this PC.
 #>
 param(
-    [string] $InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\YoutubeHDx-Player')
+    [string] $InstallDir = (Join-Path $env:LOCALAPPDATA 'Programs\YoutubeHDx-Player'),
+    # Chrome's per-user policy list of sites allowed to play sound without a click first.
+    [string] $AutoplayPolicyKey = 'HKCU:\Software\Policies\Google\Chrome\AutoplayAllowlist'
 )
 $ErrorActionPreference = 'Stop'
 $pack = $PSScriptRoot
@@ -34,6 +36,24 @@ if (Test-Path $extDir) { Remove-Item $extDir -Recurse -Force }
 Copy-Item (Join-Path $pack 'extension') $extDir -Recurse -Force
 Get-ChildItem $InstallDir -Recurse -File | Unblock-File
 Ok "Player extension copied to $extDir"
+
+# TIDAL audio plays in your TIDAL web-player tab, which Chrome keeps silent until you click in it. Adding tidal.com
+# to Chrome's autoplay allow-list (for this Windows user only) lets the Player start it by itself.
+$tidalPattern = '[*.]tidal.com'
+try {
+    if (-not (Test-Path $AutoplayPolicyKey)) { New-Item -Path $AutoplayPolicyKey -Force | Out-Null }
+    $entries = (Get-Item $AutoplayPolicyKey).Property | Where-Object { $_ -match '^\d+$' }
+    $values = @($entries | ForEach-Object { (Get-ItemProperty $AutoplayPolicyKey).$_ })
+    if ($values -contains $tidalPattern) {
+        Ok 'TIDAL may already play sound without a click (Chrome autoplay allow-list)'
+    } else {
+        $next = 1 + (@($entries | ForEach-Object { [int]$_ }) + 0 | Measure-Object -Maximum).Maximum
+        New-ItemProperty -Path $AutoplayPolicyKey -Name "$next" -Value $tidalPattern -PropertyType String -Force | Out-Null
+        Ok 'TIDAL may now play sound without a click (Chrome autoplay allow-list) - restart Chrome once'
+    }
+} catch {
+    Warn "Could not add tidal.com to Chrome's autoplay list ($($_.Exception.Message)); the first TIDAL song will ask for one click."
+}
 
 Write-Host ''
 Write-Host 'Last step, in Chrome on this PC (one time):' -ForegroundColor White

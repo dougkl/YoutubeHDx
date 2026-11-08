@@ -286,7 +286,9 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       get: async (id) => { const t = tabs.open.find((x) => x.id === id); if (!t) throw new Error('No tab with id'); return t; },
       query: async ({ url }) => tabs.open.filter((t) => [].concat(url).some((u) => t.url.startsWith(u.replace('*', '')))),
       create: async (o) => { const t = { id: 900 + tabs.created.length, ...o }; tabs.created.push(t); tabs.open.push(t); return t; },
+      update: async (id, o) => { tabs.updated.push([id, o]); const t = tabs.open.find((x) => x.id === id); return t ? { ...t, ...o } : null; },
     },
+    windows: { update: async (id) => { windowsFocused.push(id); } },
     offscreen: {
       hasDocument: async () => offscreen.open,
       // the page loads and says it's ready, like the real offscreen.js
@@ -311,7 +313,8 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     },
   };
   const offscreen = { open: false, created: [] };
-  const tabs = { open: [], created: [], removed: [] };
+  const tabs = { open: [], created: [], removed: [], updated: [] };
+  const windowsFocused = [];
   let identity = async () => { throw new Error('no sign-in in this test'); };
   const ctx = vm.createContext({
     chrome, URL, URLSearchParams, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
@@ -329,6 +332,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     session,
     offscreen,
     tabs,
+    windowsFocused,
     closeTab: async (id) => { tabs.open = tabs.open.filter((t) => t.id !== id); for (const fn of tabs.removed) await fn(id); },
     sentToRuntime,
     sentToTabs,
