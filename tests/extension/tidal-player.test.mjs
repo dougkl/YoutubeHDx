@@ -349,7 +349,7 @@ describe('service worker: TIDAL', () => {
     assert.equal(restarted.sentToRuntime.filter((m) => m.cmd === 'clock' && m.tabId === 5).length, 1);
   });
 
-  test('asks TIDAL first whether the song plays in full; a preview-only song tries one other recording, then is remembered for 3 days', async () => {
+  test('asks TIDAL whether the song plays in full; preview-only for the app: one other recording, else your TIDAL web player', async () => {
     const twoTracks = { data: [
       { id: '9', attributes: { title: 'Angels', duration: 'PT4M24S' }, relationships: { artists: { data: [{ id: 'r' }] } } },
       { id: '10', attributes: { title: 'Angels', duration: 'PT4M25S' }, relationships: { artists: { data: [{ id: 'r' }] } } }],
@@ -374,16 +374,17 @@ describe('service worker: TIDAL', () => {
     assert.equal(other.r.track.id, '10', 'the other same-length recording plays in full');
 
     const none = await run({ 9: 'PREVIEW', 10: 'PREVIEW' });
-    assert.equal(none.r.track, null);
+    assert.equal(none.r.track.id, '9', 'previews only for the app: your TIDAL web player plays it');
+    assert.equal(none.r.via, 'web');
     assert.equal(none.r.preview, true);
     const saved = none.bg.local['tidal:vid1abcdefg'];
-    assert.equal(saved.ttl, 3 * 24 * 3600e3);
+    assert.equal(saved.ttl, 30 * 24 * 3600e3);
     const before = none.calls.length;
-    assert.equal((await none.bg.send(video)).preview, true);
+    assert.equal((await none.bg.send(video)).via, 'web');
     assert.equal(none.calls.length, before, 'remembered: no new questions to TIDAL for this song');
-    saved.at -= 4 * 24 * 3600e3;
+    saved.at -= 31 * 24 * 3600e3;
     await none.bg.send(video);
-    assert.ok(none.calls.length > before, 'asked again after 3 days');
+    assert.ok(none.calls.length > before, 'asked again after 30 days');
   });
 
   test('keeps a log of what happened per song, for the settings page only', async () => {
@@ -406,6 +407,48 @@ describe('service worker: TIDAL', () => {
     assert.equal(log[0].video, 'Robbie Williams - Angels');
     await bg.send({ type: 'tidal-log-clear' }, { url: 'chrome-extension://test/options.html' });
     assert.equal(bg.local.tidalLog, undefined);
+  });
+
+  test('your TIDAL tab: opened pinned in the background, gets the song once it says hello, then the clock; answers go to the video', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    const tick = () => new Promise((r) => setTimeout(r, 10));
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '11009839', at: 12, via: 'web' }, { tab: { id: 5 } });
+    await tick();
+    assert.equal(bg.tabs.created.length, 1);
+    assert.deepEqual({ url: bg.tabs.created[0].url, active: bg.tabs.created[0].active, pinned: bg.tabs.created[0].pinned },
+                     { url: 'https://tidal.com/track/11009839', active: false, pinned: true });
+    assert.equal(bg.offscreen.created.length, 0, 'not the restricted app player');
+    const web = bg.tabs.created[0].id;
+    await bg.send({ type: 'tidal-web-hello' }, { tab: { id: web, url: 'https://tidal.com/track/11009839' } });
+    await tick();
+    const toWeb = () => bg.sentToTabs.filter(([id]) => id === web).map(([, m]) => m);
+    assert.equal(toWeb().filter((m) => m.cmd === 'load').at(-1).trackId, '11009839');
+    await bg.send({ type: 'tidal-audio', cmd: 'clock', trackId: '11009839', videoTime: 13, playing: true }, { tab: { id: 5 } });
+    await tick();
+    assert.equal(toWeb().at(-1).cmd, 'clock');
+    assert.equal(toWeb().at(-1).target, 'tidal-web');
+    await bg.send({ type: 'tidal-web-status', status: 'playing', trackId: '11009839', quality: 'LOSSLESS' }, { tab: { id: web } });
+    await tick();
+    const back = bg.sentToTabs.filter(([id]) => id === 5).at(-1)[1];
+    assert.deepEqual({ type: back.type, status: back.status, quality: back.quality }, { type: 'tidal-audio-status', status: 'playing', quality: 'LOSSLESS' });
+    // next song: same tab, no new one
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '54287688', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await tick();
+    assert.equal(bg.tabs.created.length, 1);
+    assert.equal(toWeb().at(-1).trackId, '54287688');
+    // you close the TIDAL tab: the video goes back to its own sound
+    await bg.closeTab(web);
+    await tick();
+    assert.equal(bg.sentToTabs.filter(([id]) => id === 5).at(-1)[1].status, 'error');
+  });
+
+  test('uses a TIDAL tab you already have open instead of opening one', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.tabs.open.push({ id: 77, url: 'https://tidal.com/my-collection' });
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 10));
+    assert.equal(bg.tabs.created.length, 0);
+    assert.equal(bg.sentToTabs.find(([id]) => id === 77)[1].cmd, 'load');
   });
 
   test('gives the offscreen player its credentials', async () => {

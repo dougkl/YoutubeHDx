@@ -618,8 +618,12 @@ describe('extension split', () => {
   });
 
   test('player runs the 4K/caption scripts on YouTube', () => {
-    const files = player.content_scripts.flatMap((c) => c.js);
-    assert.deepEqual(files.sort(), ['content-bridge.js', 'content-main.js', 'defaults.js']);
+    const yt = player.content_scripts.filter((c) => c.matches.every((m) => m.startsWith('https://www.youtube.com/')));
+    assert.deepEqual(yt.flatMap((c) => c.js).sort(), ['content-bridge.js', 'content-main.js', 'defaults.js']);
+    // and the TIDAL remote only on TIDAL's own web player
+    const tidal = player.content_scripts.find((c) => c.js.includes('tidal-remote.js'));
+    assert.deepEqual(tidal.matches, ['https://tidal.com/*', 'https://listen.tidal.com/*']);
+    assert.equal(tidal.world, undefined, 'isolated world: TIDAL\'s page cannot reach the extension');
     assert.equal(player.content_scripts.find((c) => c.js.includes('content-main.js')).world, 'MAIN');
   });
 

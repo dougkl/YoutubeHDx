@@ -77,7 +77,8 @@
     let result;
     try { result = await chrome.runtime.sendMessage(msg); } catch { result = null; }
     window.postMessage({ __yhdx: 'tidal-match', videoId: msg.videoId, track: result?.track ?? null,
-      reason: result?.reason ?? null, signedOut: !!result?.signedOut, preview: !!result?.preview }, location.origin);
+      reason: result?.reason ?? null, signedOut: !!result?.signedOut, preview: !!result?.preview,
+      via: result?.via === 'web' ? 'web' : null }, location.origin);
   }
 
   const AUDIO_CMDS = new Set(['load', 'clock', 'stop']);
@@ -87,6 +88,7 @@
     if (req.trackId != null) msg.trackId = String(req.trackId).replace(/\D/g, '').slice(0, 15);
     for (const k of ['at', 'videoTime', 'rate', 'offset', 'volume', 'sentAt']) if (req[k] != null) msg[k] = Number(req[k]) || 0;
     if (req.playing != null) msg.playing = !!req.playing;
+    if (req.via === 'web') msg.via = 'web';
     chrome.runtime.sendMessage(msg).catch(() => {});
   }
 

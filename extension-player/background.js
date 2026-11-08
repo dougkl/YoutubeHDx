@@ -122,16 +122,17 @@ async function tidalLog(entry) {
 }
 
 function logMatch(msg, result, remembered) {
-  const outcome = result.track ? 'found, playing TIDAL' : result.preview ? 'TIDAL gives only a 30-second preview'
+  const outcome = result.track ? (result.via === 'web' ? 'found, playing in your TIDAL web player tab' : 'found, playing TIDAL')
+    : result.preview ? 'TIDAL gives only a 30-second preview'
     : result.signedOut ? 'not signed in to TIDAL' : 'not used';
   if (result.track) trackTitles.set(String(result.track.id), String(msg.title || ''));
   tidalLog({ video: String(msg.title || msg.videoId || ''), videoId: String(msg.videoId || ''), step: 'match', outcome,
     track: trackLabel(result.track || result.previewTrack),
-    detail: [remembered ? '(remembered)' : '', result.reason, result.lengths].filter(Boolean).join(' · ') });
+    detail: [remembered ? '(remembered)' : '', result.track ? '' : result.reason, result.lengths].filter(Boolean).join(' · ') });
 }
 
 function logPlayer(msg) {
-  if (!['playing', 'preview', 'error', 'revoked'].includes(msg.status)) return;
+  if (!['playing', 'preview', 'error', 'revoked', 'need-click'].includes(msg.status)) return;
   tidalLog({ video: trackTitles.get(String(msg.trackId)) || '', step: 'player', outcome: String(msg.status),
     track: msg.trackId ? `[${msg.trackId}]` : '', detail: [msg.quality, msg.message].filter(Boolean).join(' ') });
 }
@@ -154,6 +155,8 @@ async function tidalMatchInner(msg) {
   const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
   const result = await yhdxTidalFindPlayable({ title: msg.title, author: msg.author, duration: Number(msg.duration) },
     { fetchFn: (url, init) => fetch(url, init), token: auth.access, country: tidalCountry, exclude });
+  // TIDAL gives this app only a preview, but your own TIDAL web player plays the full song: use that.
+  if (result.preview && result.previewTrack) Object.assign(result, { track: result.previewTrack, via: 'web' });
   const ttl = result.track ? TIDAL_MATCH_TTL.found : result.preview ? TIDAL_MATCH_TTL.preview : TIDAL_MATCH_TTL.notFound;
   if (!exclude.length) await chrome.storage.local.set({ [key]: { at: Date.now(), ttl, result } });
   return result;
@@ -177,7 +180,63 @@ async function ensureOffscreen() {
 
 let tidalReopening = null;
 
+// ---------------------------------------------------------------- your TIDAL web-player tab (full songs)
+const TIDAL_WEB_URL = 'https://tidal.com';
+let webLoad = null; // the last load sent to the web tab, sent again if that tab reloads
+
+async function sessionGet(key) {
+  try { return (await chrome.storage.session.get({ [key]: null }))[key]; } catch { return null; }
+}
+const sessionSet = (obj) => chrome.storage.session?.set(obj).catch(() => {});
+
+async function webTab() {
+  const id = await sessionGet('tidalWebTab');
+  if (id == null) return null;
+  try { await chrome.tabs.get(id); return id; } catch { return null; }
+}
+
+// The TIDAL tab to play in: yours if one is open (tidal.com), else a new pinned one in the background.
+async function ensureWebTab(trackId) {
+  const known = await webTab();
+  if (known != null) return { id: known, fresh: false };
+  const open = (await chrome.tabs.query({ url: ['https://tidal.com/*', 'https://listen.tidal.com/*'] }).catch(() => []))[0];
+  if (open) { await sessionSet({ tidalWebTab: open.id }); return { id: open.id, fresh: false }; }
+  const tab = await chrome.tabs.create({ url: `${TIDAL_WEB_URL}/track/${trackId}`, active: false, pinned: true });
+  await sessionSet({ tidalWebTab: tab.id });
+  return { id: tab.id, fresh: true };
+}
+
+async function tidalWebAudio(msg, tabId) {
+  if (msg.cmd === 'load') {
+    const { id } = await ensureWebTab(msg.trackId);
+    webLoad = { ...msg, target: 'tidal-web' };
+    await chrome.tabs.sendMessage(id, webLoad).catch(() => {}); // a new tab gets it with its "hello"
+    return;
+  }
+  const id = await webTab();
+  if (id == null) {
+    if (msg.cmd === 'clock') chrome.tabs.sendMessage(tabId, { type: 'tidal-audio-status', status: 'error', message: 'the TIDAL tab was closed' }).catch(() => {});
+    return;
+  }
+  await chrome.tabs.sendMessage(id, { ...msg, target: 'tidal-web' }).catch(() => {});
+  if (msg.cmd === 'stop') { webLoad = null; setAudioTab(null); }
+}
+
+async function onWebHello(tabId) {
+  await sessionSet({ tidalWebTab: tabId });
+  if (webLoad && (await sessionGet('tidalAudioVia')) === 'web') chrome.tabs.sendMessage(tabId, webLoad).catch(() => {});
+}
+
 async function tidalAudio(msg, tabId) {
+  if (msg.cmd === 'load') await sessionSet({ tidalAudioVia: msg.via === 'web' ? 'web' : 'sdk' });
+  if ((await sessionGet('tidalAudioVia')) === 'web') {
+    if (msg.cmd === 'load') {
+      const previous = await audioTab();
+      if (previous != null && previous !== tabId) chrome.tabs.sendMessage(previous, { type: 'tidal-audio-status', status: 'taken' }).catch(() => {});
+      setAudioTab(tabId);
+    } else if (tabId !== (await audioTab())) return;
+    return tidalWebAudio(msg, tabId);
+  }
   if (msg.cmd === 'load') {
     const previous = await audioTab();
     if (previous != null && previous !== tabId) chrome.tabs.sendMessage(previous, { type: 'tidal-audio-status', status: 'taken' }).catch(() => {});
@@ -200,7 +259,15 @@ async function tidalAudio(msg, tabId) {
   if (msg.cmd === 'stop') setAudioTab(null);
 }
 
-chrome.tabs?.onRemoved?.addListener(async (tabId) => { if (tabId === (await audioTab())) tidalAudio({ cmd: 'stop' }, tabId); });
+chrome.tabs?.onRemoved?.addListener(async (tabId) => {
+  if (tabId === (await audioTab())) tidalAudio({ cmd: 'stop' }, tabId);
+  else if (tabId === (await sessionGet('tidalWebTab'))) {
+    await sessionSet({ tidalWebTab: null });
+    const tab = await audioTab();
+    if (tab != null && webLoad) chrome.tabs.sendMessage(tab, { type: 'tidal-audio-status', status: 'error', message: 'the TIDAL tab was closed' }).catch(() => {});
+    webLoad = null;
+  }
+});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   switch (msg?.type) {
@@ -237,6 +304,17 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
+      return false;
+    case 'tidal-web-hello':
+      if (sender.tab?.id != null) onWebHello(sender.tab.id);
+      return false;
+    case 'tidal-web-status':
+      // From your TIDAL tab: pass to the YouTube tab it plays for.
+      audioTab().then((tab) => {
+        const m = { type: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null, quality: msg.quality ?? null, via: 'web' };
+        logPlayer(m);
+        if (tab != null) chrome.tabs.sendMessage(tab, m).catch(() => {});
+      });
       return false;
     case 'tidal-offscreen-ready':
       offscreenReady?.resolve();

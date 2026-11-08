@@ -420,7 +420,8 @@
     audio.track = data.track;
     audio.status = 'loading';
     const offset = Number(state.prefs?.audioOffset) || 0;
-    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id,
+    audio.via = data.via === 'web' ? 'web' : null;
+    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id, via: audio.via,
                          at: Math.max(0, (Number(p.getCurrentTime?.()) || 0) + offset) }, location.origin);
     startAudioClock();
   }
@@ -454,6 +455,10 @@
         break;
       case 'taken':
         audioStop(false);
+        break;
+      case 'need-click':
+        // Your TIDAL tab may only play sound after you've clicked in it once (Chrome's rule); YouTube's sound until then.
+        showAudioNote('click Play once in your TIDAL tab to let it play here');
         break;
       case 'error':
         audioStop();
@@ -575,7 +580,7 @@
     if (audio.status === 'on') {
       const offset = Number(state.prefs?.audioOffset) || 0;
       const t = audio.track;
-      return `Audio: TIDAL · ${t.artists?.[0] ?? ''} – ${t.version ? `${t.title} (${t.version})` : t.title}` +
+      return `Audio: TIDAL${audio.via === 'web' ? ' (your TIDAL tab)' : ''} · ${t.artists?.[0] ?? ''} – ${t.version ? `${t.title} (${t.version})` : t.title}` +
         (offset ? ` · ${offset > 0 ? '+' : ''}${offset.toFixed(2)} s` : '');
     }
     if (state.prefs?.audio === 'youtube') return "Audio: YouTube's sound (your choice for this video)";
