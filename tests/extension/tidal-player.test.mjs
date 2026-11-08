@@ -442,6 +442,16 @@ describe('service worker: TIDAL', () => {
     assert.equal(bg.sentToTabs.filter(([id]) => id === 5).at(-1)[1].status, 'error');
   });
 
+  test('a song remembered as "preview only" before 1.10 now plays in your TIDAL tab', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3, userId: '175' };
+    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 3 * 24 * 3600e3,
+      result: { track: null, preview: true, previewTrack: { id: '11009839', title: 'Wild Wild Life' }, reason: 'TIDAL has only a 30-second preview of this song' } };
+    const r = await bg.send(video);
+    assert.equal(r.track.id, '11009839');
+    assert.equal(r.via, 'web');
+  });
+
   test('uses a TIDAL tab you already have open instead of opening one', async () => {
     const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
     bg.tabs.open.push({ id: 77, url: 'https://tidal.com/my-collection' });

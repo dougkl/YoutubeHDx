@@ -149,7 +149,12 @@ async function tidalMatchInner(msg) {
   const exclude = (Array.isArray(msg.exclude) ? msg.exclude : []).map(String).slice(0, 20);
   const key = `tidal:${msg.videoId}`;
   const hit = (await chrome.storage.local.get(key))[key];
-  if (hit && Date.now() - hit.at < hit.ttl && !exclude.length) return { ...hit.result, remembered: true };
+  if (hit && Date.now() - hit.at < hit.ttl && !exclude.length) {
+    const r = { ...hit.result, remembered: true };
+    // remembered from before 1.10 as "preview only": your TIDAL tab plays it in full now
+    if (!r.track && r.preview && r.previewTrack) Object.assign(r, { track: r.previewTrack, via: 'web' });
+    return r;
+  }
   const auth = await tidalToken();
   if (!auth) return { track: null, reason: 'not signed in to TIDAL', signedOut: true };
   const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
