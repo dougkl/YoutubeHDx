@@ -242,12 +242,16 @@ async function autoStartWebTab(tabId, trackId) {
     return false;
   }
   try {
+    // The song is usually already in TIDAL's player bar, paused (its first start was blocked): press the bar's Play.
+    // Pressing the song's row again doesn't start an already-loaded song.
     const expression = `(() => {
+      const bar = document.querySelector('[data-test="footer-player"]');
+      const link = bar && bar.querySelector('[data-test="footer-track-title"] a[href*="/track/"]');
+      const play = bar && bar.querySelector('[data-test="play"]');
+      if (play && link && /\\/track\\/${trackId}(\\D|$)/.test(link.getAttribute('href') || '')) { play.click(); return 'footer'; }
       const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
       const b = row && (row.querySelector('[data-test="play-button"]') || row);
       if (b) { b.click(); return 'row'; }
-      const f = document.querySelector('[data-test="footer-player"] [data-test="play"]');
-      if (f) { f.click(); return 'footer'; }
       return 'none';
     })()`;
     const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, userGesture: true, returnByValue: true });

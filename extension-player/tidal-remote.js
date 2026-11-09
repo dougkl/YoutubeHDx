@@ -134,7 +134,14 @@
     if (c.switching) return;
     if (c.waitingClick) {
       const playing = findPlaying();
-      if (!playing) return;
+      if (!playing) {
+        // Sound is allowed now (a click in this tab), our song is in the player bar but paused: press the bar's Play.
+        if (navigator.userActivation?.hasBeenActive && isOurs(c) && Date.now() - (c.pressedAt || 0) > 2000) {
+          c.pressedAt = Date.now();
+          playPauseButton()?.click();
+        }
+        return;
+      }
       if (!isOurs(c)) { reselect(c); return; } // sound is allowed now, but it's another song: put ours on
       c.el = playing;
       c.waitingClick = false;
