@@ -28,6 +28,15 @@
   const playPauseButton = () => footer() && q('[data-test="play"], [data-test="pause"]', footer());
   const quality = () => (footer() && q('[data-test^="quality-badge-"]', footer()))?.getAttribute('data-test').slice('quality-badge-'.length) || null;
   const rowFor = (id) => q(`[data-test="tracklist-row"][data-track-id="${id}"]`);
+  // The song TIDAL's player bar shows (its title links to /track/<id>); null if it can't tell.
+  function tidalTrack() {
+    const a = footer() && q('[data-test="footer-track-title"] a[href*="/track/"]', footer());
+    const m = a && /\/track\/(\d+)/.exec(a.getAttribute('href') || '');
+    return m ? m[1] : null;
+  }
+  const isOurs = (c) => tidalTrack() === c.trackId;
+  // You picked other songs in the TIDAL tab this many times: the Player then leaves TIDAL to you.
+  const MAX_CHANGES = 2;
 
   function report(status, extra = {}) {
     if (!current) return;
@@ -58,30 +67,53 @@
     else m.pause();
   }
 
+  // Select our song in TIDAL and wait until it plays: TIDAL's player bar must show it, not just any sound.
+  async function playOurs(c) {
+    openTrackPage(c.trackId);
+    const row = await waitFor(() => rowFor(c.trackId), 8000);
+    if (current !== c) return false;
+    if (!row) {
+      // TIDAL's app didn't follow the in-page navigation: load the song's page.
+      location.assign(`/track/${c.trackId}`);
+      return false;
+    }
+    const playingAlready = row.getAttribute('data-test-is-playing') === 'true' && findPlaying() && isOurs(c);
+    if (!playingAlready) {
+      c.el = null;
+      (q('[data-test="play-button"]', row) || row).click();
+    }
+    const m = await waitFor(() => { const x = findPlaying(); return x && x.readyState >= 2 && isOurs(c) ? x : null; }, 6000);
+    if (current !== c) return false;
+    if (m) c.el = m;
+    return !!m;
+  }
+
   async function load(msg) {
     stop(false);
-    const mine = current = { trackId: String(msg.trackId), at: Number(msg.at) || 0, clock: null, loaded: false, waitingClick: false, reported: false };
-    openTrackPage(mine.trackId);
-    let row = await waitFor(() => rowFor(mine.trackId), 8000);
+    const mine = current = { trackId: String(msg.trackId), at: Number(msg.at) || 0, clock: null, loaded: false,
+      waitingClick: false, reported: false, switching: false, changes: 0 };
+    const ok = await playOurs(mine);
     if (current !== mine) return;
-    if (!row) {
-      // TIDAL's app didn't follow the in-page navigation: load the song's page (then it needs one click for sound).
-      location.assign(`/track/${mine.trackId}`);
-      return;
-    }
-    (q('[data-test="play-button"]', row) || row).click();
-    const m = await waitFor(() => { const x = findPlaying(); return x && x.readyState >= 2 ? x : null; }, 6000);
-    if (current !== mine) return;
-    if (!m) {
-      // Chrome only lets a page play sound after you've clicked in it once.
-      mine.waitingClick = true;
-      report('need-click');
-    } else {
-      mine.el = m;
+    if (ok) {
       mine.loaded = true;
       report('loaded');
+    } else {
+      // Chrome only lets a page play sound after a click in it (the Player tries that click itself).
+      mine.waitingClick = true;
+      report('need-click');
     }
     start();
+  }
+
+  // Back to our song (after a click in the TIDAL tab started something else).
+  function reselect(c) {
+    if (c.switching) return;
+    c.switching = true;
+    playOurs(c).then((ok) => {
+      if (current !== c) return;
+      c.switching = false;
+      if (ok && !c.loaded) { c.loaded = true; c.waitingClick = false; report('loaded'); }
+    });
   }
 
   function start() {
@@ -99,13 +131,28 @@
   function tick() {
     const c = current;
     if (!c) return;
+    if (c.switching) return;
     if (c.waitingClick) {
       const playing = findPlaying();
       if (!playing) return;
+      if (!isOurs(c)) { reselect(c); return; } // sound is allowed now, but it's another song: put ours on
       c.el = playing;
-      c.waitingClick = false; // you clicked Play: from now on this tab may play by itself
+      c.waitingClick = false;
       c.loaded = true;
       report('loaded');
+    }
+    if (c.loaded && tidalTrack() && !isOurs(c)) {
+      // Another song in the TIDAL tab (your click there?): back to ours; if you keep choosing others, they're yours.
+      c.changes += 1;
+      if (c.changes >= MAX_CHANGES) {
+        report('changed');
+        clearInterval(loop);
+        loop = null;
+        current = null;
+        return;
+      }
+      reselect(c);
+      return;
     }
     const m = media();
     if (!c.loaded || !c.clock || !m) return;

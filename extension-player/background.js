@@ -132,7 +132,7 @@ function logMatch(msg, result, remembered) {
 }
 
 function logPlayer(msg) {
-  if (!['playing', 'preview', 'error', 'revoked', 'need-click'].includes(msg.status)) return;
+  if (!['playing', 'preview', 'error', 'revoked', 'need-click', 'changed'].includes(msg.status)) return;
   tidalLog({ video: trackTitles.get(String(msg.trackId)) || '', step: 'player', outcome: String(msg.status),
     track: msg.trackId ? `[${msg.trackId}]` : '', detail: [msg.quality, msg.message].filter(Boolean).join(' ') });
 }

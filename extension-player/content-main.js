@@ -459,6 +459,11 @@
       case 'taken':
         audioStop(false);
         break;
+      case 'changed':
+        // You chose other songs in the TIDAL tab: TIDAL is yours now, the video gets its own sound back.
+        audioStop();
+        showAudioNote('you chose another song in the TIDAL tab');
+        break;
       case 'need-click':
         // Chrome blocked the TIDAL tab's sound until you click in it (the Player installer normally allows tidal.com):
         // YouTube's sound until then; the note stays, and clicking it takes you to the TIDAL tab.
