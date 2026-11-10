@@ -435,14 +435,13 @@
     switch (data.status) {
       case 'loaded':
         if (ui.hq?.classList?.contains('yhdx-click')) hideHqBadge();
-        if (audio.status === 'loading') audio.status = 'ready'; // TIDAL is ready: YouTube's sound goes off
-        if (!isAd(getPlayer())) muteYoutube(true);
+        if (audio.status === 'loading') audio.status = 'ready'; // TIDAL is ready; YouTube plays on until TIDAL sounds
         break;
       case 'playing':
         if (audio.status !== 'on') {
           audio.status = 'on';
           audio.quality = data.quality;
-          muteYoutube(true);
+          if (!isAd(getPlayer())) fadeYoutube(true, FADE_IN_TIDAL_MS); // TIDAL fades in at the same time
           showHqBadge();
           updateSyncButton();
         }
@@ -478,6 +477,33 @@
     }
   }
 
+  // Crossfades: YouTube's sound fades out while TIDAL's fades in (and back), so the switch has no gap. Equal-power
+  // curve; the video's own volume setting is put back afterwards (it's muted instead).
+  const FADE_IN_TIDAL_MS = 1500;
+  const FADE_BACK_MS = 700;
+
+  function fadeYoutube(toTidal, ms) {
+    const v = videoElement(getPlayer());
+    if (!v) return;
+    clearInterval(audio.fade?.timer);
+    const base = audio.fade?.base ?? v.volume;
+    if (toTidal && (v.muted || base === 0)) { muteYoutube(true); audio.fade = null; return; }
+    if (!toTidal && !audio.mutedByUs) { audio.fade = null; return; }
+    if (!toTidal) { v.volume = 0; v.muted = false; audio.mutedByUs = false; }
+    const start = Date.now();
+    const fade = audio.fade = { base, timer: null };
+    fade.timer = setInterval(() => {
+      const x = Math.min(1, (Date.now() - start) / ms);
+      const g = toTidal ? Math.cos((x * Math.PI) / 2) : Math.sin((x * Math.PI) / 2);
+      v.volume = Math.max(0, Math.min(1, base * g));
+      if (x < 1) return;
+      clearInterval(fade.timer);
+      if (audio.fade === fade) audio.fade = null;
+      v.volume = base;
+      if (toTidal) muteYoutube(true);
+    }, 30);
+  }
+
   function muteYoutube(on) {
     const v = videoElement(getPlayer());
     if (!v) return;
@@ -495,7 +521,7 @@
     const v = videoElement(p);
     const ad = isAd(p);
     // Ads keep their own sound; the music video's is muted again when it comes back.
-    if (audio.status === 'ready' || audio.status === 'on') muteYoutube(!ad);
+    if (audio.status === 'on' && !audio.fade) muteYoutube(!ad);
     const playing = Boolean(v && !v.paused && !v.seeking && !ad && (v.readyState ?? 4) >= 3);
     const volume = p.isMuted?.() ? 0 : (Number(p.getVolume?.() ?? 100) / 100);
     window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: Number(p.getCurrentTime?.()) || 0,
@@ -511,6 +537,7 @@
       detachVideoListeners();
       const now = () => sendClock();
       for (const ev of ['play', 'pause', 'seeked', 'ratechange', 'waiting', 'playing']) v.addEventListener?.(ev, now);
+      v.addEventListener?.('ended', onVideoEnded);
       audio.video = v;
       audio.listeners = now;
     }
@@ -520,9 +547,18 @@
   function detachVideoListeners() {
     if (audio.video && audio.listeners) {
       for (const ev of ['play', 'pause', 'seeked', 'ratechange', 'waiting', 'playing']) audio.video.removeEventListener?.(ev, audio.listeners);
+      audio.video.removeEventListener?.('ended', onVideoEnded);
     }
     audio.video = null;
     audio.listeners = null;
+  }
+
+  // The song is over: TIDAL stops (and its tab closes if the Player opened it). Playing this video again asks TIDAL anew.
+  function onVideoEnded() {
+    const v = audio.video;
+    audioStop();
+    audio.requested = null;
+    v?.addEventListener?.('play', restart, { once: true });
   }
 
   /** Back to YouTube's sound (and tell the TIDAL player to stop). */
@@ -531,7 +567,7 @@
     audio.timer = null;
     detachVideoListeners();
     if (tellPlayer && audio.track) window.postMessage({ __yhdx: 'tidal-audio', cmd: 'stop' }, location.origin);
-    muteYoutube(false);
+    fadeYoutube(false, FADE_BACK_MS); // TIDAL fades out meanwhile
     hideHqBadge();
     const wasOn = audio.status === 'on';
     audio.track = null;

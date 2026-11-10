@@ -17,6 +17,8 @@ const timerApi = {
   setInterval: (...a) => globalThis.setInterval(...a),
   clearInterval: (...a) => globalThis.clearInterval(...a),
 };
+// The page's clock, also looked up at call time (mock.timers can fake Date too).
+const clockApi = { Date: { now: () => globalThis.Date.now() } };
 
 /** defaults.js as a module-like object. */
 export function loadDefaults() {
@@ -48,7 +50,7 @@ export class FakePlayer {
     this.muted = false; // YouTube's own mute button
     // The <video> element YouTube plays into.
     this.video = {
-      muted: false, paused: false, seeking: false, readyState: 4, playbackRate: 1, listeners: {},
+      muted: false, volume: 0.8, paused: false, seeking: false, readyState: 4, playbackRate: 1, listeners: {},
       addEventListener(t, fn) { (this.listeners[t] ??= []).push(fn); },
       removeEventListener(t, fn) { this.listeners[t] = (this.listeners[t] ?? []).filter((f) => f !== fn); },
       fire(t) { for (const fn of this.listeners[t] ?? []) fn({}); },
@@ -237,7 +239,7 @@ export function createYoutubePage({ player = new FakePlayer(), pathname = '/watc
 
   const ctx = vm.createContext({
     window, document, location: page.location, HTMLVideoElement, URL, ArrayBuffer, JSON,
-    XMLHttpRequest: FakeXHR, fetch: fakeFetch, ...timerApi,
+    XMLHttpRequest: FakeXHR, fetch: fakeFetch, ...timerApi, ...clockApi,
   });
   vm.runInContext(playerSource('content-main.js'), ctx);
 
@@ -286,6 +288,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       get: async (id) => { const t = tabs.open.find((x) => x.id === id); if (!t) throw new Error('No tab with id'); return t; },
       query: async ({ url }) => tabs.open.filter((t) => [].concat(url).some((u) => t.url.startsWith(u.replace('*', '')))),
       create: async (o) => { const t = { id: 900 + tabs.created.length, ...o }; tabs.created.push(t); tabs.open.push(t); return t; },
+      remove: async (id) => { tabs.closed.push(id); tabs.open = tabs.open.filter((t) => t.id !== id); for (const fn of tabs.removed) await fn(id); },
       update: async (id, o) => { tabs.updated.push([id, o]); const t = tabs.open.find((x) => x.id === id); return t ? { ...t, ...o } : null; },
     },
     windows: { update: async (id) => { windowsFocused.push(id); } },
@@ -318,13 +321,13 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     },
   };
   const offscreen = { open: false, created: [] };
-  const tabs = { open: [], created: [], removed: [], updated: [] };
+  const tabs = { open: [], created: [], removed: [], updated: [], closed: [] };
   const windowsFocused = [];
   const dbg = { log: [], answer: 'row', refuse: false };
   let identity = async () => { throw new Error('no sign-in in this test'); };
   const ctx = vm.createContext({
     chrome, URL, URLSearchParams, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
-    Date: { now }, TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise, setTimeout, clearTimeout,
+    Date: { now }, TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise, ...timerApi,
   });
   ctx.importScripts = (name) => vm.runInContext(playerSource(name), ctx);
   vm.runInContext(playerSource('background.js'), ctx);

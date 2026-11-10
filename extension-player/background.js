@@ -205,14 +205,36 @@ async function ensureWebTab(trackId) {
   const known = await webTab();
   if (known != null) return { id: known, fresh: false };
   const open = (await chrome.tabs.query({ url: ['https://tidal.com/*', 'https://listen.tidal.com/*'] }).catch(() => []))[0];
-  if (open) { await sessionSet({ tidalWebTab: open.id }); return { id: open.id, fresh: false }; }
+  if (open) { await sessionSet({ tidalWebTab: open.id, tidalWebTabOurs: false }); return { id: open.id, fresh: false }; }
   const tab = await chrome.tabs.create({ url: `${TIDAL_WEB_URL}/track/${trackId}`, active: false, pinned: true });
-  await sessionSet({ tidalWebTab: tab.id });
+  await sessionSet({ tidalWebTab: tab.id, tidalWebTabOurs: true });
   return { id: tab.id, fresh: true };
+}
+
+// The pinned TIDAL tab the Player opened is closed once the music is over (the song ended, another video without
+// TIDAL, the YouTube tab closed), so TIDAL can't go on to other songs by itself. A next song within a few seconds
+// (a playlist) keeps it. A TIDAL tab you opened yourself is left open.
+const CLOSE_WEB_TAB_MS = 10000;
+let closeWebTabTimer = null;
+
+function cancelWebTabClose() {
+  clearTimeout(closeWebTabTimer);
+  closeWebTabTimer = null;
+}
+
+function closeWebTabSoon(id) {
+  cancelWebTabClose();
+  closeWebTabTimer = setTimeout(async () => {
+    closeWebTabTimer = null;
+    if (webLoad || id !== (await webTab()) || !(await sessionGet('tidalWebTabOurs'))) return;
+    await sessionSet({ tidalWebTab: null, tidalWebTabOurs: false });
+    chrome.tabs.remove(id).catch(() => {});
+  }, CLOSE_WEB_TAB_MS);
 }
 
 async function tidalWebAudio(msg, tabId) {
   if (msg.cmd === 'load') {
+    cancelWebTabClose();
     const { id } = await ensureWebTab(msg.trackId);
     webLoad = { ...msg, target: 'tidal-web' };
     await chrome.tabs.sendMessage(id, webLoad).catch(() => {}); // a new tab gets it with its "hello"
@@ -224,7 +246,7 @@ async function tidalWebAudio(msg, tabId) {
     return;
   }
   await chrome.tabs.sendMessage(id, { ...msg, target: 'tidal-web' }).catch(() => {});
-  if (msg.cmd === 'stop') { webLoad = null; setAudioTab(null); }
+  if (msg.cmd === 'stop') { webLoad = null; setAudioTab(null); closeWebTabSoon(id); }
 }
 
 // Chrome keeps your TIDAL tab silent until you click in it. The Player does that one click for you: it runs TIDAL's
@@ -264,7 +286,7 @@ async function autoStartWebTab(tabId, trackId) {
 }
 
 async function onWebHello(tabId) {
-  await sessionSet({ tidalWebTab: tabId });
+  if (tabId !== (await sessionGet('tidalWebTab'))) await sessionSet({ tidalWebTab: tabId, tidalWebTabOurs: false });
   if (webLoad && (await sessionGet('tidalAudioVia')) === 'web') chrome.tabs.sendMessage(tabId, webLoad).catch(() => {});
 }
 
@@ -303,7 +325,8 @@ async function tidalAudio(msg, tabId) {
 chrome.tabs?.onRemoved?.addListener(async (tabId) => {
   if (tabId === (await audioTab())) tidalAudio({ cmd: 'stop' }, tabId);
   else if (tabId === (await sessionGet('tidalWebTab'))) {
-    await sessionSet({ tidalWebTab: null });
+    cancelWebTabClose();
+    await sessionSet({ tidalWebTab: null, tidalWebTabOurs: false });
     const tab = await audioTab();
     if (tab != null && webLoad) chrome.tabs.sendMessage(tab, { type: 'tidal-audio-status', status: 'error', message: 'the TIDAL tab was closed' }).catch(() => {});
     webLoad = null;

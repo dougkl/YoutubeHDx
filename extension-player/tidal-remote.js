@@ -7,6 +7,26 @@
   window.__yhdxRemote = true;
 
   const TICK_MS = 150;
+  // Crossfade with the video (which fades out / back in at the same time): no gap when the sound switches.
+  const FADE_IN_MS = 1500;
+  const FADE_OUT_MS = 700;
+  let fading = null;
+
+  function fadeMedia(m, from, to, ms, done) {
+    clearInterval(fading?.timer);
+    const start = Date.now();
+    const f = fading = { m, to, timer: null };
+    m.volume = Math.max(0, Math.min(1, from));
+    f.timer = setInterval(() => {
+      const x = Math.min(1, (Date.now() - start) / ms);
+      const g = to > from ? Math.sin((x * Math.PI) / 2) : Math.cos((x * Math.PI) / 2);
+      m.volume = Math.max(0, Math.min(1, to > from ? to * g : from * g));
+      if (x < 1) return;
+      clearInterval(f.timer);
+      if (fading === f) fading = null;
+      done?.();
+    }, 30);
+  }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const q = (sel, root = document) => root.querySelector(sel);
   let current = null; // { trackId, clock, loaded, waitingClick, reported }
@@ -124,8 +144,17 @@
   function stop(pause = true) {
     clearInterval(loop);
     loop = null;
-    if (pause && current) setPlaying(false);
+    const c = current;
     current = null;
+    const m = c && (c.el || findPlaying());
+    if (pause && m && !m.paused) {
+      const vol = c.vol ?? m.volume;
+      fadeMedia(m, m.volume, 0, FADE_OUT_MS, () => { setPlaying(false, m); m.volume = vol; });
+    } else if (m && c.vol != null && fading?.m === m) {
+      clearInterval(fading.timer);
+      fading = null;
+      m.volume = c.vol;
+    }
   }
 
   function tick() {
@@ -165,14 +194,19 @@
     if (!c.loaded || !c.clock || !m) return;
     const k = c.clock;
     const target = k.videoTime + (k.playing ? ((Date.now() - k.sentAt) / 1000) * k.rate : 0) + (k.offset || 0);
-    if (!k.playing || target < 0) { setPlaying(false, m); return; }
+    // Never to the end of TIDAL's song: TIDAL would go on to another song by itself.
+    const atEnd = Number.isFinite(m.duration) && m.duration > 1 && target >= m.duration - 0.3;
+    if (!k.playing || target < 0 || atEnd) { setPlaying(false, m); return; }
     if (m.paused) {
       if (!m.seeking && Math.abs(m.currentTime - target) > 0.35) m.currentTime = Math.max(0, target);
+      if (!c.reported && c.vol == null) { c.vol = m.volume || 1; m.volume = 0; } // silent until the crossfade
       setPlaying(true, m);
       return;
     }
     if (!c.reported) {
       c.reported = true;
+      if (c.vol == null) c.vol = m.volume || 1;
+      fadeMedia(m, 0, c.vol, FADE_IN_MS); // the video fades out at the same time
       report('playing', { quality: quality() });
     }
     if (m.seeking) return;

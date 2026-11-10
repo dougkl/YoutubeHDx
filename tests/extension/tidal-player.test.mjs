@@ -23,6 +23,7 @@ function playingTidal(opts) {
   page.sendTidalMatch('vid1', TRACK);
   page.sendAudioStatus('loaded', { trackId: TRACK.id });
   page.sendAudioStatus('playing', { trackId: TRACK.id, quality: 'HI_RES_LOSSLESS' });
+  advance(1600); // crossfade done
   return page;
 }
 
@@ -46,7 +47,7 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 0);
   });
 
-  test('match: loads TIDAL, mutes YouTube once TIDAL is ready, shows the sign bottom-left and keeps a small one there', () => {
+  test('match: loads TIDAL, crossfades to it once TIDAL sounds, shows the sign bottom-left and keeps a small one there', () => {
     const page = watch();
     page.sendTidalMatch('vid1', TRACK);
     const load = audioMsgs(page, 'load')[0];
@@ -54,8 +55,14 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(load.at, 42);
     assert.equal(page.player.video.muted, false);          // not before TIDAL is ready
     page.sendAudioStatus('loaded', { trackId: TRACK.id });
-    assert.equal(page.player.video.muted, true);
+    assert.equal(page.player.video.muted, false);          // nor before TIDAL actually sounds (no gap)
     page.sendAudioStatus('playing', { trackId: TRACK.id, quality: 'HI_RES_LOSSLESS' });
+    advance(750);                                          // halfway through the crossfade: YouTube still audible, quieter
+    assert.equal(page.player.video.muted, false);
+    assert.ok(page.player.video.volume > 0.4 && page.player.video.volume < 0.75, String(page.player.video.volume));
+    advance(850);
+    assert.equal(page.player.video.muted, true);           // faded out: muted, its own volume put back
+    assert.equal(page.player.video.volume, 0.8);
     const sign = page.inPlayer('yhdx-hq')[0];
     assert.equal(sign.textContent, '♪ High-quality audio found · TIDAL Hi-Res');
     advance(100);
@@ -160,6 +167,7 @@ describe('TIDAL audio for music videos', () => {
     page.sendTidalMatch('vid2', TRACK);
     page.sendAudioStatus('loaded', { trackId: TRACK.id });
     page.sendAudioStatus('playing', { trackId: TRACK.id, quality: 'LOSSLESS' });
+    advance(1600);
     assert.equal(page.player.video.muted, true);
     assert.equal(page.inPlayer('yhdx-hq').length, 1);
   });
@@ -204,7 +212,35 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-focus').length, 1);
     page.sendAudioStatus('loaded', { trackId: TRACK.id });
     assert.equal(page.inPlayer('yhdx-click').length, 0);
+    page.sendAudioStatus('playing', { trackId: TRACK.id });
+    advance(1600);
     assert.equal(page.player.video.muted, true);
+  });
+
+  test('back to YouTube\'s sound (another video, your choice, an error): it fades back in, no jump', () => {
+    const page = playingTidal();
+    assert.equal(page.player.video.muted, true);
+    page.syncButton().click();
+    page.chooseMenu("Use YouTube's sound for this video");
+    advance(60);
+    assert.equal(page.player.video.muted, false);
+    assert.ok(page.player.video.volume < 0.3, `starts quiet: ${page.player.video.volume}`);
+    advance(800);
+    assert.equal(page.player.video.volume, 0.8);
+  });
+
+  test('the video ends: TIDAL stops (so it can\'t go on to other songs); playing it again asks TIDAL again', () => {
+    const page = playingTidal();
+    page.player.video.fire('ended');
+    assert.equal(audioMsgs(page, 'stop').length, 1);
+    advance(800);
+    assert.equal(page.player.video.muted, false);
+    assert.equal(page.inPlayer('yhdx-hq').length, 0);
+    const asks = () => page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length;
+    const before = asks();
+    page.player.video.fire('play');
+    advance(600);
+    assert.equal(asks(), before + 1);
   });
 
   test('another video: TIDAL stops and YouTube sound comes back', () => {
@@ -456,6 +492,64 @@ describe('service worker: TIDAL', () => {
     await bg.closeTab(web);
     await tick();
     assert.equal(bg.sentToTabs.filter(([id]) => id === 5).at(-1)[1].status, 'error');
+  });
+
+  test('the song is over: the TIDAL tab the Player opened closes a little later; a next song in time keeps it', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+      const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web' }, { tab: { id: 5 } });
+      await flush();
+      const web = bg.tabs.created[0].id;
+      await bg.send({ type: 'tidal-web-hello' }, { tab: { id: web, url: 'https://tidal.com/track/1' } });
+      await flush();
+      // a playlist: the next song comes before the tab would close
+      await bg.send({ type: 'tidal-audio', cmd: 'stop' }, { tab: { id: 5 } });
+      await flush();
+      mock.timers.tick(5000);
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+      await flush();
+      mock.timers.tick(20000);
+      await flush();
+      assert.deepEqual(bg.tabs.closed, [], 'still open for the next song');
+      assert.equal(bg.tabs.created.length, 1);
+      // the end: closed 10 s later, and the next song opens a new one
+      await bg.send({ type: 'tidal-audio', cmd: 'stop' }, { tab: { id: 5 } });
+      await flush();
+      mock.timers.tick(9000);
+      await flush();
+      assert.deepEqual(bg.tabs.closed, []);
+      mock.timers.tick(1100);
+      await flush();
+      assert.deepEqual(bg.tabs.closed, [web]);
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'error').length, 0, 'no "TIDAL tab was closed" note');
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '3', at: 0, via: 'web' }, { tab: { id: 5 } });
+      await flush();
+      assert.equal(bg.tabs.created.length, 2);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test('a TIDAL tab you opened yourself stays open after the song', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+      const flush = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
+      bg.tabs.open.push({ id: 77, url: 'https://tidal.com/my-collection' });
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web' }, { tab: { id: 5 } });
+      await flush();
+      assert.equal(bg.tabs.created.length, 0);
+      await bg.send({ type: 'tidal-audio', cmd: 'stop' }, { tab: { id: 5 } });
+      await flush();
+      mock.timers.tick(30000);
+      await flush();
+      assert.deepEqual(bg.tabs.closed, []);
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 77 && m.cmd === 'stop').length, 1, 'just stopped');
+    } finally {
+      mock.timers.reset();
+    }
   });
 
   test('a song remembered as "preview only" before 1.10 now plays in your TIDAL tab', async () => {
