@@ -753,6 +753,36 @@ describe('service worker: TIDAL', () => {
     assert.deepEqual(bg2.tabs.reloaded, []);
   });
 
+  test('the TIDAL tab is the one in the video\'s window (one behind a full-screen video in another window can\'t start)', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    const tick = () => new Promise((r) => setTimeout(r, 20));
+    bg.tabs.open.push({ id: 5, url: 'https://www.youtube.com/watch?v=x', windowId: 1 });
+    bg.tabs.open.push({ id: 70, url: 'https://tidal.com/album/1/track/2', windowId: 2 });
+    bg.tabs.open.push({ id: 71, url: 'https://tidal.com/', windowId: 1 });
+    bg.session.tidalWebTab = 70; // used before, in the other window
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await tick();
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 71 && m.cmd === 'load').length, 1);
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 70 && m.cmd === 'stop').length, 1, 'the other one is stopped');
+    assert.equal(bg.tabs.created.length, 0);
+    // a hello from another TIDAL tab doesn't take over
+    await bg.send({ type: 'tidal-web-hello' }, { tab: { id: 70, url: 'https://tidal.com/' } });
+    await tick();
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 70 && m.cmd === 'load').length, 0);
+  });
+
+  test('no TIDAL tab in the video\'s window: a new pinned one opens there', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.tabs.open.push({ id: 5, url: 'https://www.youtube.com/watch?v=x', windowId: 3 });
+    bg.tabs.open.push({ id: 70, url: 'https://tidal.com/', windowId: 2 });
+    bg.session.tidalWebTab = 70;
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(bg.tabs.created.length, 1);
+    assert.equal(bg.tabs.created[0].windowId, 3);
+    assert.equal(bg.tabs.created[0].pinned, true);
+  });
+
   test('a TIDAL tab you opened yourself: used, and left open after the song', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {

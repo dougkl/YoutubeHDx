@@ -12,8 +12,27 @@
   const FADE_OUT_MS = 700;
   let fading = null;
 
-  function fadeMedia(m, from, to, ms, done) {
+  // TIDAL remembers its volume from the media element, so while the Player fades it, your real volume is kept here:
+  // if the page reloads in the middle of a fade, the next start puts it back.
+  const VOL_KEY = 'yhdx-tidal-volume';
+  const keepVolume = (v) => { try { localStorage.setItem(VOL_KEY, String(v)); } catch { /* private mode */ } };
+  const forgetVolume = () => { try { localStorage.removeItem(VOL_KEY); } catch { /* ignore */ } };
+  function restoreVolume() {
+    let saved = null;
+    try { saved = localStorage.getItem(VOL_KEY); } catch { return; }
+    const v = Number(saved);
+    if (saved == null || !(v > 0 && v <= 1)) return;
+    const end = Date.now() + 15000;
+    const t = setInterval(() => {
+      const els = [...document.querySelectorAll('video, audio')];
+      if (els.length) { for (const m of els) m.volume = v; forgetVolume(); clearInterval(t); } else if (Date.now() > end) clearInterval(t);
+    }, 300);
+  }
+  restoreVolume();
+
+  function fadeMedia(m, from, to, ms, done, keep) {
     clearInterval(fading?.timer);
+    if (keep > 0) keepVolume(keep);
     const start = Date.now();
     const f = fading = { m, to, timer: null };
     m.volume = Math.max(0, Math.min(1, from));
@@ -25,6 +44,7 @@
       clearInterval(f.timer);
       if (fading === f) fading = null;
       done?.();
+      if (keep > 0 && m.volume === keep) forgetVolume();
     }, 30);
   }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -151,7 +171,7 @@
     const m = c && (c.el || findPlaying());
     if (pause && m && !m.paused) {
       const vol = c.vol ?? m.volume;
-      fadeMedia(m, m.volume, 0, FADE_OUT_MS, () => { setPlaying(false, m); m.volume = vol; });
+      fadeMedia(m, m.volume, 0, FADE_OUT_MS, () => { setPlaying(false, m); m.volume = vol; }, vol);
     } else if (m && c.vol != null && fading?.m === m) {
       clearInterval(fading.timer);
       fading = null;
@@ -210,14 +230,14 @@
     }
     if (m.paused) {
       if (!m.seeking && Math.abs(m.currentTime - target) > 0.35) m.currentTime = Math.max(0, target);
-      if (!c.reported && c.vol == null) { c.vol = m.volume || 1; m.volume = 0; } // silent until the crossfade
+      if (!c.reported && c.vol == null) { c.vol = m.volume || 1; keepVolume(c.vol); m.volume = 0; } // silent until the crossfade
       setPlaying(true, m);
       return;
     }
     if (!c.reported) {
       c.reported = true;
       if (c.vol == null) c.vol = m.volume || 1;
-      fadeMedia(m, 0, c.vol, FADE_IN_MS); // the video fades out at the same time
+      fadeMedia(m, 0, c.vol, FADE_IN_MS, null, c.vol); // the video fades out at the same time
       report('playing', { quality: quality() });
     }
     if (m.seeking) return;

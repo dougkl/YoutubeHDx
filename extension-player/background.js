@@ -210,12 +210,26 @@ async function webTab() {
 }
 
 // The TIDAL tab to play in: yours if one is open (tidal.com), else a new pinned one in the background.
-async function ensureWebTab(trackId) {
+// The TIDAL tab to play in, in the video's window: there the Player can bring it to the front for a moment (a TIDAL
+// tab in a window behind a full-screen video stays "hidden" to Chrome and can't start). Yours if one is open there,
+// else a new pinned one in the background of that window.
+async function ensureWebTab(trackId, ytTabId) {
+  const yt = ytTabId != null ? await chrome.tabs.get(ytTabId).catch(() => null) : null;
+  const win = yt?.windowId;
   const known = await webTab();
-  if (known != null) return { id: known, fresh: false };
-  const open = (await chrome.tabs.query({ url: ['https://tidal.com/*', 'https://listen.tidal.com/*'] }).catch(() => []))[0];
-  if (open) { await sessionSet({ tidalWebTab: open.id }); return { id: open.id, fresh: false }; }
-  const tab = await chrome.tabs.create({ url: `${TIDAL_WEB_URL}/track/${trackId}`, active: false, pinned: true });
+  const knownTab = known != null ? await chrome.tabs.get(known).catch(() => null) : null;
+  if (knownTab && (win == null || knownTab.windowId === win)) return { id: known, fresh: false };
+  const open = await chrome.tabs.query({ url: ['https://tidal.com/*', 'https://listen.tidal.com/*'] }).catch(() => []);
+  const here = open.find((t) => win != null && t.windowId === win);
+  let pick = here || (knownTab ? null : open[0]);
+  if (!pick && knownTab && win == null) pick = knownTab;
+  if (pick) {
+    if (known != null && pick.id !== known) chrome.tabs.sendMessage(known, { target: 'tidal-web', cmd: 'stop' }).catch(() => {});
+    await sessionSet({ tidalWebTab: pick.id });
+    return { id: pick.id, fresh: false };
+  }
+  if (known != null) chrome.tabs.sendMessage(known, { target: 'tidal-web', cmd: 'stop' }).catch(() => {});
+  const tab = await chrome.tabs.create({ url: `${TIDAL_WEB_URL}/track/${trackId}`, active: false, pinned: true, ...(win != null ? { windowId: win } : {}) });
   await sessionSet({ tidalWebTab: tab.id });
   return { id: tab.id, fresh: true };
 }
@@ -258,7 +272,7 @@ async function peekWebTab(webId, ytId, during) {
 
 async function tidalWebAudio(msg, tabId) {
   if (msg.cmd === 'load') {
-    const { id, fresh } = await ensureWebTab(msg.trackId);
+    const { id, fresh } = await ensureWebTab(msg.trackId, tabId);
     webLoad = { ...msg, target: 'tidal-web' };
     // A new tab gets it with its "hello". A TIDAL tab open since before the Player was updated has no live copy of the
     // Player's script (Chrome doesn't add it to open tabs): reload it, and it says hello.
@@ -338,6 +352,8 @@ async function autoStartWebTab(tabId, trackId) {
 }
 
 async function onWebHello(tabId) {
+  const known = await webTab();
+  if (known != null && known !== tabId) return; // another TIDAL tab of yours: left alone
   webPlayed.delete(tabId); // a page (re)loaded: it hasn't played yet
   await sessionSet({ tidalWebTab: tabId });
   if (webLoad && (await sessionGet('tidalAudioVia')) === 'web') chrome.tabs.sendMessage(tabId, webLoad).catch(() => {});
