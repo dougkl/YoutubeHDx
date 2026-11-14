@@ -111,6 +111,27 @@ describe('TIDAL audio for music videos', () => {
     page.player.video.muted = false;
     advance(300);
     assert.equal(page.player.video.muted, true);
+    // at once when the element says so (no moment of YouTube's sound)
+    page.player.video.muted = false;
+    page.player.video.fire('volumechange');
+    assert.equal(page.player.video.muted, true);
+  });
+
+  test('the "♪ TIDAL" corner label is the switch: click for YouTube\'s sound, click again for TIDAL', () => {
+    const page = playingTidal();
+    const label = page.inPlayer('yhdx-hq')[0];
+    assert.match(label.className, /yhdx-toggle/);
+    label.click();
+    assert.equal(page.savedPrefs.vid1.audio, 'youtube');
+    assert.equal(audioMsgs(page, 'stop').length, 1);
+    advance(800);
+    assert.equal(page.player.video.muted, false);
+    const back = page.inPlayer('yhdx-hq')[0];
+    assert.match(back.textContent, /YouTube's sound · click for TIDAL/);
+    back.click();
+    assert.equal(page.savedPrefs.vid1.audio, undefined);
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
+    advance(8000);
   });
 
   test('⇄ menu: timing nudges, another recording, and YouTube sound for this video (remembered)', () => {
@@ -277,17 +298,20 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.inPlayer('yhdx-hq').length, 0);
   });
 
-  test('TIDAL tab blocked by Chrome: the note stays, clicking it asks for the TIDAL tab, and goes away once TIDAL plays', () => {
+  test('TIDAL couldn\'t start by itself: a short note (never left over the video), "open the TIDAL tab" in the ⇄ menu', () => {
     const page = watch();
     page.sendTidalMatch('vid1', TRACK);
     page.sendAudioStatus('need-click', { trackId: TRACK.id });
     const note = page.inPlayer('yhdx-click')[0];
-    assert.match(note.textContent, /click here, then Play in the TIDAL tab/);
-    advance(30000);
-    assert.equal(page.inPlayer('yhdx-click')[0], note, 'stays until TIDAL plays');
-    assert.equal(page.player.video.muted, false, "YouTube's sound until then");
+    assert.match(note.textContent, /didn't start by itself/);
     note.click();
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-focus').length, 1);
+    advance(8000);
+    assert.equal(page.inPlayer('yhdx-click').length, 0, 'gone after a few seconds');
+    assert.equal(page.player.video.muted, false, "YouTube's sound until then");
+    page.syncButton().click();
+    page.chooseMenu("TIDAL didn't start: open the TIDAL tab (press Play there)");
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-focus').length, 2);
     page.sendAudioStatus('loaded', { trackId: TRACK.id });
     assert.equal(page.inPlayer('yhdx-click').length, 0);
     page.sendAudioStatus('playing', { trackId: TRACK.id });
@@ -631,12 +655,11 @@ describe('service worker: TIDAL', () => {
       // shown first, Play pressed while it's in front (pressing it while hidden is what failed)
       assert.equal(JSON.stringify(bg.tabs.updated), JSON.stringify([[web, { active: true }]]));
       assert.equal(bg.dbg.log.filter(([m]) => m === 'Runtime.evaluate').length, 0);
-      mock.timers.tick(300);
+      mock.timers.tick(1000); // a moment to start by itself first
       await flush();
       assert.equal(bg.dbg.log.filter(([m, id]) => m === 'Runtime.evaluate' && id === web).length, 1);
       await bg.send({ type: 'tidal-web-status', status: 'loaded', trackId: '1' }, { tab: { id: web } });
       await flush();
-      assert.equal(bg.tabs.updated.length, 1, 'stays in front at least 0.8 s');
       mock.timers.tick(800);
       await flush();
       assert.equal(JSON.stringify(bg.tabs.updated.at(-1)), JSON.stringify([5, { active: true }]), 'the video is in front again');
@@ -680,6 +703,7 @@ describe('service worker: TIDAL', () => {
       mock.timers.tick(300);
       await flush();
       assert.equal(JSON.stringify(bg.tabs.updated), JSON.stringify([[web, { active: true }], [5, { active: true }]]));
+      assert.equal(bg.dbg.log.filter(([m, id]) => m === 'Runtime.evaluate' && id === web).length, 0, 'TIDAL started by itself once shown: nothing pressed');
       const onVideo = bg.dbg.log.filter(([m, id]) => m === 'Runtime.evaluate' && id === 5);
       assert.equal(onVideo.length, 1);
       assert.match(onVideo[0][2].expression, /ytp-fullscreen-button/);
@@ -755,7 +779,7 @@ describe('service worker: TIDAL', () => {
     await wait();
     const web = bg.tabs.created[0].id;
     await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '134283114' }, { tab: { id: web }, url: 'https://tidal.com/album/134283113/track/134283114' });
-    await wait(400); // (a new tab is shown first, then Play)
+    await wait(1150); // (a new tab is shown first; Play after a moment)
     const [attach, evaluate] = bg.dbg.log;
     assert.deepEqual([...attach], ['attach', web]);
     assert.equal(evaluate[0], 'Runtime.evaluate');

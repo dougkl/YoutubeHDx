@@ -282,14 +282,15 @@ async function tidalWebAudio(msg, tabId) {
 // own Play for this song as a user action, through Chrome's debugger API attached for a moment (Chrome shows a bar
 // "started debugging this browser" while it is). Once is enough for as long as that tab stays open.
 const AUTO_START_WAIT_MS = 5000;
-const PEEK_SETTLE_MS = 300;  // the TIDAL tab in front this long before its Play is pressed
+const PEEK_SETTLE_MS = 1000; // the TIDAL tab in front this long (it may start by itself) before its Play is pressed
 const PEEK_MAX_MS = 4000;    // at most this long in front, waiting for TIDAL to sound
 
-// Resolves when TIDAL reports it plays (or after ms).
+// Resolves true when TIDAL reports it plays, false after ms.
 function waitForSound(key, ms) {
   return new Promise((resolve) => {
-    const done = () => { clearTimeout(t); if (autoStart.sounded === done) autoStart.sounded = null; resolve(); };
-    const t = setTimeout(done, ms);
+    if (autoStart.waiting !== key) { resolve(true); return; } // already sounded
+    const done = (ok = false) => { clearTimeout(t); if (autoStart.sounded === done) autoStart.sounded = null; resolve(ok); };
+    const t = setTimeout(() => done(false), ms);
     autoStart.sounded = done;
   });
 }
@@ -322,14 +323,18 @@ async function autoStartWebTab(tabId, trackId) {
     const bar = document.querySelector('[data-test="footer-player"]');
     const link = bar && bar.querySelector('[data-test="footer-track-title"] a[href*="/track/"]');
     const play = bar && bar.querySelector('[data-test="play"]');
-    if (play && link && /\\/track\\/${trackId}(\\D|$)/.test(link.getAttribute('href') || '')) { play.click(); return 'footer'; }
+    const ours = link && /\\/track\\/${trackId}(\\D|$)/.test(link.getAttribute('href') || '');
+    if (ours && play) { play.click(); return 'footer'; }
+    // Our song with Pause showing: TIDAL is already starting it (Chrome may still be holding the sound). Clicking
+    // anything now would stop it.
+    if (ours && bar.querySelector('[data-test="pause"]')) return 'starting';
     const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
     const b = row && (row.querySelector('[data-test="play-button"]') || row);
     if (b) { b.click(); return 'row'; }
     return 'none';
   })()`;
   const v = await evalAsUser(tabId, expression);
-  return v === 'row' || v === 'footer';
+  return v === 'row' || v === 'footer' || v === 'starting';
 }
 
 async function onWebHello(tabId) {
@@ -458,7 +463,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             // press Play while it's in front, and go back to the video once TIDAL sounds (a few seconds at most).
             autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS + PEEK_MAX_MS);
             const shown = await peekWebTab(webId, tab, async () => {
-              await new Promise((r) => setTimeout(r, PEEK_SETTLE_MS));
+              // On screen, a song TIDAL was already starting goes on by itself: give it a moment before pressing Play.
+              if (await waitForSound(key, PEEK_SETTLE_MS)) return;
               if (await pressPlay()) await waitForSound(key, PEEK_MAX_MS);
             });
             if (shown) tidalLog({ video: title, step: 'player', outcome: 'showed the TIDAL tab for a moment to start it (Chrome starts sound only in a tab on screen)', track: `[${m.trackId}]` });
@@ -472,7 +478,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           clearTimeout(autoStart.timer);
           autoStart.waiting = null;
           if (sender.tab?.id != null) webPlayed.add(sender.tab.id);
-          autoStart.sounded?.();
+          autoStart.sounded?.(true);
         }
         forward();
       });

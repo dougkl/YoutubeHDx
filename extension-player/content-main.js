@@ -199,6 +199,8 @@
 .yhdx-hq.yhdx-note.yhdx-show { opacity: .65; }
 .yhdx-hq.yhdx-click { pointer-events: auto; cursor: pointer; opacity: .9; }
 .yhdx-hq.yhdx-click:hover { opacity: 1; background: rgba(0,0,0,.75); }
+.yhdx-hq.yhdx-toggle { pointer-events: auto; cursor: pointer; }
+.yhdx-hq.yhdx-toggle:hover { opacity: 1; background: rgba(0,0,0,.75); }
 .ytp-autohide .yhdx-hq { bottom: 14px; }
 .ad-showing .yhdx-hq { display: none; }`;
 
@@ -239,7 +241,7 @@
       else controls.prepend(b);
       ui.button = b;
     }
-    ui.button.style.display = current || hasPrefs() || audio.status === 'on' || audio.status === 'gap' || audio.nearest ? '' : 'none';
+    ui.button.style.display = current || hasPrefs() || audio.status === 'on' || audio.status === 'gap' || audio.nearest || audio.needClick ? '' : 'none';
   }
 
   function closeMenu() {
@@ -440,6 +442,7 @@
     }
     switch (data.status) {
       case 'loaded':
+        audio.needClick = false;
         if (ui.hq?.classList?.contains('yhdx-click')) hideHqBadge();
         if (audio.status === 'loading') audio.status = 'ready'; // TIDAL is ready; YouTube plays on until TIDAL sounds
         break;
@@ -552,6 +555,7 @@
       const now = () => sendClock();
       for (const ev of ['play', 'pause', 'seeked', 'ratechange', 'waiting', 'playing']) v.addEventListener?.(ev, now);
       v.addEventListener?.('ended', onVideoEnded);
+      v.addEventListener?.('volumechange', onVolumeChange);
       audio.video = v;
       audio.listeners = now;
     }
@@ -562,9 +566,19 @@
     if (audio.video && audio.listeners) {
       for (const ev of ['play', 'pause', 'seeked', 'ratechange', 'waiting', 'playing']) audio.video.removeEventListener?.(ev, audio.listeners);
       audio.video.removeEventListener?.('ended', onVideoEnded);
+      audio.video.removeEventListener?.('volumechange', onVolumeChange);
     }
     audio.video = null;
     audio.listeners = null;
+  }
+
+  // YouTube un-mutes its video now and then (about once a minute): mute it again at once, not at the next clock tick,
+  // or its sound comes through for a moment.
+  function onVolumeChange() {
+    const v = audio.video;
+    if (!v || v.muted || audio.status !== 'on' || audio.fade || isAd(getPlayer())) return;
+    v.muted = true;
+    audio.mutedByUs = true;
   }
 
   // The song is over: TIDAL stops (and its tab closes if the Player opened it). Playing this video again asks TIDAL anew.
@@ -585,6 +599,7 @@
     hideHqBadge();
     const wasOn = audio.status === 'on';
     audio.track = null;
+    audio.needClick = false;
     audio.status = 'idle';
     audio.quality = null;
     if (wasOn) updateSyncButton();
@@ -596,7 +611,10 @@
     ensureUiStyle();
     hideHqBadge();
     const el = document.createElement('div');
-    el.className = 'yhdx-hq';
+    el.className = 'yhdx-hq yhdx-toggle';
+    el.setAttribute('role', 'button');
+    el.title = "Click: YouTube's sound for this video (remembered)";
+    el.addEventListener('click', (e) => { e.stopPropagation(); useYoutubeAudio(); showYoutubeChoice(); });
     const q = audio.quality === 'HI_RES_LOSSLESS' ? 'Hi-Res' : audio.quality === 'LOSSLESS' ? 'Lossless' : '';
     el.textContent = `♪ High-quality audio found · TIDAL${q ? ` ${q}` : ''}`;
     p.appendChild(el);
@@ -608,6 +626,26 @@
       el.textContent = `♪ TIDAL${q ? ` ${q}` : ''}`;
       el.classList?.add('yhdx-mini');
     }, 5000);
+  }
+
+  // After you clicked "♪ TIDAL": a small "♪ YouTube's sound" for a few seconds; clicking it goes back to TIDAL.
+  function showYoutubeChoice() {
+    const p = getPlayer();
+    if (!p) return;
+    ensureUiStyle();
+    hideHqBadge();
+    const el = document.createElement('div');
+    el.className = 'yhdx-hq yhdx-mini yhdx-toggle yhdx-show';
+    el.setAttribute('role', 'button');
+    el.title = "Click: TIDAL's sound again";
+    el.textContent = "♪ YouTube's sound · click for TIDAL";
+    el.addEventListener('click', (e) => { e.stopPropagation(); hideHqBadge(); useTidalAudio(); });
+    p.appendChild(el);
+    ui.hq = el;
+    ui.hqTimer = setTimeout(() => {
+      el.classList?.remove('yhdx-show');
+      setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 1500);
+    }, 6000);
   }
 
   /** Why this song keeps YouTube's sound, in the same corner for 6 s (so you can see TIDAL was tried). */
@@ -629,22 +667,33 @@
     }, 6000);
   }
 
+  // TIDAL couldn't start by itself: a short note (never left over the video), clickable while it shows; the ⇄ menu
+  // keeps "Open the TIDAL tab" for later. YouTube's sound meanwhile.
   function showNeedClick() {
     const p = getPlayer();
     if (!p) return;
+    audio.needClick = true;
+    updateSyncButton();
     ensureUiStyle();
     hideHqBadge();
     const el = document.createElement('div');
-    el.className = 'yhdx-hq yhdx-note yhdx-click yhdx-show';
+    el.className = 'yhdx-hq yhdx-note yhdx-click';
     el.setAttribute('role', 'button');
-    el.textContent = "♪ TIDAL is ready: click here, then Play in the TIDAL tab · YouTube's sound until then";
+    el.textContent = "♪ TIDAL didn't start by itself · YouTube's sound (click to open the TIDAL tab)";
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      window.postMessage({ __yhdx: 'tidal-focus' }, location.origin);
+      openTidalTab();
     });
     p.appendChild(el);
     ui.hq = el;
+    setTimeout(() => el.classList?.add('yhdx-show'), 30);
+    ui.hqTimer = setTimeout(() => {
+      el.classList?.remove('yhdx-show');
+      setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 1500);
+    }, 6000);
   }
+
+  const openTidalTab = () => window.postMessage({ __yhdx: 'tidal-focus' }, location.origin);
 
   function hideHqBadge() {
     clearTimeout(ui.hqTimer);
@@ -675,6 +724,9 @@
       if (audio.chosen) items.push(["TIDAL sound is early: play it 1 s later", () => nudgeAudio(-1)]);
       if (!audio.chosen) items.push(['Not the same recording: try another TIDAL track', rejectTrack]);
       items.push([audio.chosen ? "Keep YouTube's sound for this video (as before)" : "Use YouTube's sound for this video", useYoutubeAudio]);
+    } else if (audio.needClick && audio.track) {
+      items.push(["TIDAL didn't start: open the TIDAL tab (press Play there)", openTidalTab]);
+      items.push(["Use YouTube's sound for this video", useYoutubeAudio]);
     } else if (audio.status === 'none' && audio.nearest && settings?.tidalAudio) {
       // Where is the extra part? Its length (d) sets where TIDAL starts; the 1 s / 0.1 s steps fine-tune it after.
       const d = Math.round((Number(audio.nearest.seconds) || 0) - (Number(getPlayer()?.getDuration?.()) || 0));
