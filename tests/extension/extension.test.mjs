@@ -608,7 +608,12 @@ describe('extension split', () => {
   const downloader = readManifest('downloader');
 
   test('player never gets cookies or native messaging; only lyrics sites and TIDAL besides YouTube', () => {
-    assert.deepEqual(player.permissions, ['storage', 'identity', 'offscreen', 'debugger']);
+    assert.deepEqual(player.permissions, ['storage', 'identity', 'offscreen', 'debugger', 'downloads', 'downloads.ui']);
+    // downloads: only the backup of your choices (Downloads\YoutubeHDx\player-backup.json), with Chrome's download
+    // bubble off for that moment; never a song or a video.
+    const bgSrcDl = readFileSync(new URL('../../extension-player/background.js', import.meta.url), 'utf8');
+    assert.equal((bgSrcDl.match(/chrome\.downloads\.download\(/g) || []).length, 1);
+    assert.match(bgSrcDl, /filename: 'YoutubeHDx\/player-backup\.json'/);
     // debugger: only to press TIDAL's own Play once in your TIDAL tab (Chrome keeps that tab silent until a click),
     // only for a message from a tidal.com page, attached for a moment.
     const bgSrc = readFileSync(new URL('../../extension-player/background.js', import.meta.url), 'utf8');

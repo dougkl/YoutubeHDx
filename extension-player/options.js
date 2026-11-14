@@ -109,3 +109,50 @@ $('tidalLogRefresh').onclick = showTidalLog;
 $('tidalLogCopy').onclick = async () => { await navigator.clipboard.writeText(await tidalLogText()); flash('TIDAL log copied.'); };
 $('tidalLogClear').onclick = async () => { await chrome.runtime.sendMessage({ type: 'tidal-log-clear' }); showTidalLog(); };
 showTidalLog();
+
+// ---------------------------------------------------------------- backup of your choices
+const when = (t) => (t ? new Date(t).toLocaleString() : 'never');
+const nasText = { ok: 'saved', 'not set': 'no folder chosen yet', 'needs permission': 'Chrome needs your OK again (button below)' };
+async function showBackup() {
+  const { backupStatus: b } = await chrome.storage.local.get({ backupStatus: null });
+  const dir = await yhdxGetBackupDir();
+  const perm = dir ? await dir.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt') : null;
+  $('backupAllow').hidden = !dir || perm === 'granted';
+  $('backupFolder').textContent = dir ? `NAS folder: ${dir.name} (change…)` : 'Choose NAS folder…';
+  $('backupStatus').textContent = b
+    ? `Last backup ${when(b.at)} · ${b.videos} videos · Downloads: ${b.downloads === 'ok' ? 'saved' : b.downloads} · NAS: ${nasText[b.nas] ?? b.nas}`
+    : 'No backup yet.';
+}
+async function backupNow() {
+  $('backupStatus').textContent = 'Backing up…';
+  await chrome.runtime.sendMessage({ type: 'backup-now' }).catch(() => null);
+  await showBackup();
+}
+$('backupFolder').onclick = async () => {
+  let dir;
+  try { dir = await showDirectoryPicker({ id: 'yhdx-backup', mode: 'readwrite' }); } catch { return; } // you closed the picker
+  if ((await dir.requestPermission({ mode: 'readwrite' })) !== 'granted') return;
+  await yhdxSetBackupDir(dir);
+  await backupNow();
+  flash(`Backups go to ${dir.name} too.`);
+};
+$('backupAllow').onclick = async () => {
+  const dir = await yhdxGetBackupDir();
+  if (dir && (await dir.requestPermission({ mode: 'readwrite' })) === 'granted') await backupNow();
+  else await showBackup();
+};
+$('backupNow').onclick = backupNow;
+$('backupRestore').onclick = () => $('backupFile').click();
+$('backupFile').onchange = async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const n = await yhdxRestoreBackup(JSON.parse(await file.text()));
+    flash(`Restored your choices for ${n} videos (and the settings). Reload open YouTube pages.`);
+    fill(await chrome.storage.sync.get(YHDX_DEFAULTS));
+  } catch (err) {
+    flash(`Couldn't restore: ${err?.message || err}`);
+  }
+};
+showBackup();

@@ -271,6 +271,8 @@ export function loadLyrics() {
 /** Player background.js with lyrics.js (importScripts) and fake chrome storage + fetch. */
 export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () => Date.now(), session = {} } = {}) {
   const local = { openSubtitlesKey };
+  const syncStore = {};
+  const storageListeners = [];
   const onMessage = [];
   const sentToRuntime = [];
   const sentToTabs = [];
@@ -305,6 +307,12 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       },
       remove: async (id) => { tabs.windowsClosed.push(id); },
     },
+    downloads: {
+      download: async (o) => { const id = 700 + downloads.saved.length; downloads.saved.push(o); setTimeout(() => { for (const fn of downloads.listeners) fn({ id, state: { current: 'complete' } }); }, 0); return id; },
+      onChanged: { addListener: (fn) => downloads.listeners.push(fn), removeListener: (fn) => { downloads.listeners = downloads.listeners.filter((f) => f !== fn); } },
+      erase: async (q) => { downloads.erased.push(q.id); return [q.id]; },
+      setUiOptions: async (o) => { downloads.ui.push(o.enabled); },
+    },
     debugger: {
       attach: async (target) => { if (dbg.refuse) throw new Error('Cannot attach'); dbg.log.push(['attach', target.tabId]); },
       sendCommand: async (target, method, params) => { dbg.log.push([method, target.tabId, params]); return { result: { value: dbg.answer } }; },
@@ -319,14 +327,20 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     storage: {
       local: {
         get: async (q) => {
+          if (q == null) return { ...local };
           if (typeof q === 'string') return q in local ? { [q]: local[q] } : {};
           const out = { ...q };
           for (const k of Object.keys(q)) if (k in local) out[k] = local[k];
           return out;
         },
-        set: async (obj) => Object.assign(local, obj),
+        set: async (obj) => { Object.assign(local, obj); const ch = Object.fromEntries(Object.keys(obj).map((k) => [k, { newValue: obj[k] }])); for (const fn of storageListeners) fn(ch, 'local'); },
         remove: async (k) => { for (const key of [].concat(k)) delete local[key]; },
       },
+      sync: {
+        get: async (q) => (q == null ? { ...syncStore } : { ...q, ...syncStore }),
+        set: async (obj) => { Object.assign(syncStore, obj); for (const fn of storageListeners) fn(obj, 'sync'); },
+      },
+      onChanged: { addListener: (fn) => storageListeners.push(fn) },
       session: {
         get: async (q) => { const out = { ...q }; for (const k of Object.keys(q)) if (k in session) out[k] = session[k]; return out; },
         set: async (obj) => Object.assign(session, obj),
@@ -334,13 +348,15 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     },
   };
   const offscreen = { open: false, created: [] };
+  const downloads = { saved: [], listeners: [], erased: [], ui: [] };
   const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [], windows: [], windowsClosed: [], answer: {} };
   const windowsFocused = [];
   const dbg = { log: [], answer: 'row', refuse: false };
   let identity = async () => { throw new Error('no sign-in in this test'); };
   const ctx = vm.createContext({
     chrome, URL, URLSearchParams, encodeURIComponent, JSON, Error, fetch: (...a) => fetchFn(...a),
-    Date: { now }, TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise, ...timerApi,
+    Date: class extends globalThis.Date { constructor(...a) { super(...(a.length ? a : [now()])); } static now() { return now(); } },
+    TextEncoder, btoa, crypto: globalThis.crypto, String, Number, Promise, Object, ...timerApi,
   });
   ctx.importScripts = (name) => vm.runInContext(playerSource(name), ctx);
   vm.runInContext(playerSource('background.js'), ctx);
@@ -352,6 +368,9 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
   return {
     local,
     session,
+    syncStore,
+    downloads,
+    ctx,
     offscreen,
     tabs,
     windowsFocused,
