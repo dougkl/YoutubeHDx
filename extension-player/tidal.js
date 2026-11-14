@@ -7,7 +7,8 @@
 
 const YHDX_TIDAL_API = 'https://openapi.tidal.com/v2';
 const YHDX_TIDAL_TOLERANCE_S = 2;     // TIDAL track length must be within this of the video's
-const YHDX_TIDAL_MANUAL_S = 10;       // otherwise you may still pick TIDAL's version if it's this close (you sync it)
+const YHDX_TIDAL_MANUAL_S = 20;       // otherwise you may still pick TIDAL's version if it's this close (you sync it;
+                                      // the Player offers up to 10 s off, and asks before 10-20 s)
 
 // ---------------------------------------------------------------- song names
 

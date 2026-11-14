@@ -112,7 +112,7 @@ describe('search through the official API', () => {
     assert.equal(r.track, null);
     assert.equal(r.reason, 'no same-length recording on TIDAL');
     assert.equal(r.lengths, 'video 3:10; TIDAL has 3:42, 3:59');
-    assert.equal(r.nearest, undefined, '32 s apart: not offered');
+    assert.equal(r.nearest, undefined, '32 s apart: not offered (over 20 s)');
   });
 
   test('a miss within 10 s offers TIDAL\'s closest version (you sync it)', async () => {

@@ -275,6 +275,17 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.inPlayer('yhdx-hq').length, 1);
   });
 
+  test('TIDAL\'s closest version 10-20 s off: the ⇄ menu asks first, then offers it', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL', nearest: { id: '56', title: 'Major Tom', artists: ['Peter Schilling'], seconds: 285 } });
+    assert.match(page.inPlayer('yhdx-hq')[0].textContent, /its version is 15 s shorter · ⇄ to use it anyway/);
+    page.syncButton().click();
+    assert.ok(!page.menuItems().some((x) => /anyway/.test(x)));
+    page.chooseMenu("No TIDAL version within 10 s: try TIDAL's, 15 s shorter? · TIDAL 4:45, video 5:00");
+    assert.ok(page.menu(), 'the menu opens again');
+    assert.ok(page.menuItems().includes('Use TIDAL anyway: the video has a longer intro (TIDAL starts at 0:15) · TIDAL 4:45, video 5:00'));
+  });
+
   test('TIDAL\'s version too far off (no closest one offered): no "Use TIDAL anyway"', () => {
     const page = watch();
     page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL' });
@@ -468,7 +479,7 @@ describe('service worker: TIDAL', () => {
     bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, result: { track: null, reason: 'no same-length recording on TIDAL' } };
     assert.equal((await bg.send(video)).track.id, '9');
     assert.ok(calls.length > 0);
-    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, rules: 3, result: { track: null, reason: 'song not found on TIDAL' } };
+    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, rules: 4, result: { track: null, reason: 'song not found on TIDAL' } };
     const n = calls.length;
     assert.equal((await bg.send(video)).track, null);
     assert.equal(calls.length, n);

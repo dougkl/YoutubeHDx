@@ -50,7 +50,7 @@ const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
 const TIDAL_SCOPES = 'search.read playback user.read';
 // A song that TIDAL only plays as a preview is looked at again after 3 days (access can change per song).
 const TIDAL_MATCH_TTL = { found: 30 * DAY, notFound: 7 * DAY, preview: 3 * DAY };
-const TIDAL_MATCH_RULES = 3; // 2: radio edits / single versions count when the length matches; 3: + nearest version
+const TIDAL_MATCH_RULES = 4; // 2: radio edits / single versions count when the length matches; 3: + nearest version; 4: up to 20 s
 let tidalAudioTab = null; // the tab whose video TIDAL is playing for
 // Chrome stops this service worker when it's idle (e.g. a long pause), which would forget the tab: keep it in session storage.
 const audioTabStore = chrome.storage.session;

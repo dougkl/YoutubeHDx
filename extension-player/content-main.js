@@ -403,6 +403,7 @@
     audio.videoId = vd.video_id;
     audio.status = 'finding';
     audio.nearest = null;
+    audio.widened = false;
     window.postMessage({ __yhdx: 'tidal-match-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration,
                          exclude: state.prefs.rejectedTracks ?? [] }, location.origin);
     return true;
@@ -421,7 +422,11 @@
         audio.signInHintShown = true;
         toast('TIDAL audio: sign in to TIDAL in the YoutubeHDx Player settings');
       } else if (!data.signedOut) {
-        showAudioNote(data.preview ? 'only a 30-second preview of this song' : (data.reason || 'not found'));
+        const n = data.nearest;
+        const off = n ? Math.abs(Math.round((Number(n.seconds) || 0) - (Number(p.getDuration?.()) || 0))) : 0;
+        showAudioNote(data.preview ? 'only a 30-second preview of this song'
+          : n ? `its version is ${off} s ${n.seconds < p.getDuration?.() ? 'shorter' : 'longer'} · ⇄ to use it anyway`
+          : (data.reason || 'not found'));
       }
       return;
     }
@@ -731,7 +736,11 @@
       // Where is the extra part? Its length (d) sets where TIDAL starts; the 1 s / 0.1 s steps fine-tune it after.
       const d = Math.round((Number(audio.nearest.seconds) || 0) - (Number(getPlayer()?.getDuration?.()) || 0));
       const lens = `TIDAL ${mmss(audio.nearest.seconds)}, video ${mmss(getPlayer()?.getDuration?.())}`;
-      if (d < 0) {
+      if (Math.abs(d) > NEAR_S && !audio.widened) {
+        // 10-20 s off: ask first (a bigger difference is more often another recording).
+        items.push([`No TIDAL version within ${NEAR_S} s: try TIDAL's, ${Math.abs(d)} s ${d < 0 ? 'shorter' : 'longer'}? · ${lens}`,
+          () => { audio.widened = true; toggleMenu(); }]);
+      } else if (d < 0) {
         items.push([`Use TIDAL anyway: the video has a longer intro (TIDAL starts at ${mmss(-d)}) · ${lens}`, () => useTidalAnyway(d)]);
         items.push([`Use TIDAL anyway: the video has a longer ending · ${lens}`, () => useTidalAnyway(0)]);
       } else {
@@ -744,6 +753,7 @@
     return items;
   }
 
+  const NEAR_S = 10; // TIDAL versions this close are offered at once; up to 20 s after asking
   const mmss = (x) => { const v = Math.round(Number(x) || 0); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; };
 
   // TIDAL's version is a little longer or shorter than the video (another intro or ending): play it anyway; the ⇄ menu
