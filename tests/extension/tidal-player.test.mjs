@@ -626,21 +626,24 @@ describe('service worker: TIDAL', () => {
       await flush();
       const web = bg.tabs.created[0].id;
       bg.tabs.created[0].windowId = 1;
-      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
       await flush();
-      assert.ok(bg.dbg.log.some(([m]) => m === 'Runtime.evaluate'), 'pressed Play first');
-      assert.deepEqual(bg.tabs.updated, []);
-      mock.timers.tick(1000);
-      await flush();
+      // shown first, Play pressed while it's in front (pressing it while hidden is what failed)
       assert.equal(JSON.stringify(bg.tabs.updated), JSON.stringify([[web, { active: true }]]));
+      assert.equal(bg.dbg.log.filter(([m]) => m === 'Runtime.evaluate').length, 0);
+      mock.timers.tick(300);
+      await flush();
+      assert.equal(bg.dbg.log.filter(([m, id]) => m === 'Runtime.evaluate' && id === web).length, 1);
       await bg.send({ type: 'tidal-web-status', status: 'loaded', trackId: '1' }, { tab: { id: web } });
       await flush();
-      mock.timers.tick(1200);
+      assert.equal(bg.tabs.updated.length, 1, 'stays in front at least 0.8 s');
+      mock.timers.tick(800);
       await flush();
       assert.equal(JSON.stringify(bg.tabs.updated.at(-1)), JSON.stringify([5, { active: true }]), 'the video is in front again');
-      mock.timers.tick(5000);
+      mock.timers.tick(9000);
       await flush();
       assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 0, 'nothing to ask you');
+      assert.match(bg.local.tidalLog.map((e) => e.outcome).join('|'), /showed the TIDAL tab/);
       // next song in the same tab (it has played now): no showing
       await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
       await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '2' }, { tab: { id: web }, url: 'https://tidal.com/track/2' });
@@ -666,11 +669,13 @@ describe('service worker: TIDAL', () => {
       await flush();
       const web = bg.tabs.created[0].id;
       bg.tabs.created[0].windowId = 1;
-      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
       await flush();
-      mock.timers.tick(1000);
+      mock.timers.tick(300);
       await flush();
-      mock.timers.tick(1200);
+      await bg.send({ type: 'tidal-web-status', status: 'playing', trackId: '1' }, { tab: { id: web } });
+      await flush();
+      mock.timers.tick(800);
       await flush();
       mock.timers.tick(300);
       await flush();
@@ -750,7 +755,7 @@ describe('service worker: TIDAL', () => {
     await wait();
     const web = bg.tabs.created[0].id;
     await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '134283114' }, { tab: { id: web }, url: 'https://tidal.com/album/134283113/track/134283114' });
-    await wait();
+    await wait(400); // (a new tab is shown first, then Play)
     const [attach, evaluate] = bg.dbg.log;
     assert.deepEqual([...attach], ['attach', web]);
     assert.equal(evaluate[0], 'Runtime.evaluate');

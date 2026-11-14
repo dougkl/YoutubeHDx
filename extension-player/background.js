@@ -223,25 +223,27 @@ async function ensureWebTab(trackId) {
 // Chrome doesn't start sound in a background tab it has never shown (it waits until you look at it); a tab that has
 // played once can go on loading songs in the background. So the TIDAL tab stays open between songs (paused: TIDAL never
 // goes on to other songs by itself), and a new one is shown for a moment — then the video's tab is back in front.
-const PEEK_MS = 1200;
+const PEEK_MS = 800; // at least this long in front
 const webPlayed = new Set(); // TIDAL tabs that have played since their page loaded
 const ytFullscreen = new Map(); // video tab -> full screen (from its clock)
 let peeking = null;
 
-async function peekWebTab(webId, ytId) {
+async function peekWebTab(webId, ytId, during) {
   if (peeking || webPlayed.has(webId)) return false;
   const web = await chrome.tabs.get(webId).catch(() => null);
   if (!web || web.active) return false;
   const win = await chrome.windows?.get(web.windowId).catch(() => null);
   if (win?.state === 'minimized') return false;
   const yt = ytId != null ? await chrome.tabs.get(ytId).catch(() => null) : null;
-  const sameWindow = yt?.windowId === web.windowId;
+  const sameWindow = !!yt && yt.windowId === web.windowId;
   const back = sameWindow ? yt.id : (await chrome.tabs.query({ active: true, windowId: web.windowId }).catch(() => []))[0]?.id;
   // Switching tabs takes a full-screen video out of full screen: put it back right after (YouTube's own button).
   const refullscreen = sameWindow && yt.active && ytFullscreen.get(yt.id) === true;
   peeking = (async () => {
     await chrome.tabs.update(webId, { active: true }).catch(() => {});
-    await new Promise((r) => setTimeout(r, PEEK_MS));
+    const shownAt = Date.now();
+    if (during) await during();
+    await new Promise((r) => setTimeout(r, Math.max(0, PEEK_MS - (Date.now() - shownAt))));
     if (back != null) await chrome.tabs.update(back, { active: true }).catch(() => {});
     if (refullscreen) {
       await new Promise((r) => setTimeout(r, 300));
@@ -280,7 +282,17 @@ async function tidalWebAudio(msg, tabId) {
 // own Play for this song as a user action, through Chrome's debugger API attached for a moment (Chrome shows a bar
 // "started debugging this browser" while it is). Once is enough for as long as that tab stays open.
 const AUTO_START_WAIT_MS = 5000;
-const PEEK_AFTER_MS = 1000; // after the automatic Play, TIDAL normally sounds within this; if not, show its tab
+const PEEK_SETTLE_MS = 300;  // the TIDAL tab in front this long before its Play is pressed
+const PEEK_MAX_MS = 4000;    // at most this long in front, waiting for TIDAL to sound
+
+// Resolves when TIDAL reports it plays (or after ms).
+function waitForSound(key, ms) {
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(t); if (autoStart.sounded === done) autoStart.sounded = null; resolve(); };
+    const t = setTimeout(done, ms);
+    autoStart.sounded = done;
+  });
+}
 const autoStart = { tried: new Set(), timer: null, waiting: null };
 
 // Runs a script in a tab as if you had clicked (Chrome's debugger, attached for a moment). Returns its value or null.
@@ -429,19 +441,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           if (sender.tab?.id != null && fromTidal && !autoStart.tried.has(key)) {
             autoStart.tried.add(key);
             const webId = sender.tab.id;
-            const pressed = await autoStartWebTab(webId, m.trackId);
-            if (pressed) tidalLog({ video: trackTitles.get(String(m.trackId)) || '', step: 'player', outcome: 'started TIDAL for you (no click needed)', track: `[${m.trackId}]` });
-            if (pressed || !webPlayed.has(webId)) {
-              clearTimeout(autoStart.timer);
-              autoStart.waiting = key;
+            const title = trackTitles.get(String(m.trackId)) || '';
+            const pressPlay = async () => {
+              const pressed = await autoStartWebTab(webId, m.trackId);
+              if (pressed) tidalLog({ video: title, step: 'player', outcome: 'started TIDAL for you (no click needed)', track: `[${m.trackId}]` });
+              return pressed;
+            };
+            clearTimeout(autoStart.timer);
+            autoStart.waiting = key;
+            if (webPlayed.has(webId)) {
+              if (!(await pressPlay())) { autoStart.waiting = null; forward(); return; }
               autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS);
-              // A TIDAL tab Chrome has never shown waits for you to look at it before any sound: show it for a moment.
-              setTimeout(async () => {
-                if (autoStart.waiting !== key) return;
-                if (await peekWebTab(webId, tab)) tidalLog({ video: trackTitles.get(String(m.trackId)) || '', step: 'player', outcome: 'showed the new TIDAL tab for a moment (Chrome starts sound only in a tab it has shown)', track: `[${m.trackId}]` });
-              }, PEEK_AFTER_MS);
               return;
             }
+            // A TIDAL tab that hasn't played since it loaded: Chrome starts its sound only while it's on screen. Show it,
+            // press Play while it's in front, and go back to the video once TIDAL sounds (a few seconds at most).
+            autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS + PEEK_MAX_MS);
+            const shown = await peekWebTab(webId, tab, async () => {
+              await new Promise((r) => setTimeout(r, PEEK_SETTLE_MS));
+              if (await pressPlay()) await waitForSound(key, PEEK_MAX_MS);
+            });
+            if (shown) tidalLog({ video: title, step: 'player', outcome: 'showed the TIDAL tab for a moment to start it (Chrome starts sound only in a tab on screen)', track: `[${m.trackId}]` });
+            else if (!(await pressPlay())) { clearTimeout(autoStart.timer); autoStart.waiting = null; forward(); }
+            return;
           }
           forward();
           return;
@@ -450,6 +472,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           clearTimeout(autoStart.timer);
           autoStart.waiting = null;
           if (sender.tab?.id != null) webPlayed.add(sender.tab.id);
+          autoStart.sounded?.();
         }
         forward();
       });
