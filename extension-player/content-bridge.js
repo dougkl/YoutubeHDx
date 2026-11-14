@@ -12,9 +12,21 @@
     window.postMessage({ __yhdx: 'stale' }, location.origin);
   }
 
+  // To the service worker. Never throws: once cut off, Chrome throws right in the call (not a rejected promise).
+  function send(msg) {
+    if (!alive()) { stale(); return Promise.resolve(null); }
+    try {
+      return chrome.runtime.sendMessage(msg).catch(() => { if (!alive()) stale(); return null; });
+    } catch {
+      stale();
+      return Promise.resolve(null);
+    }
+  }
+
   async function push() {
     if (!alive()) { stale(); return; }
-    const settings = await chrome.storage.sync.get(YHDX_DEFAULTS);
+    let settings;
+    try { settings = await chrome.storage.sync.get(YHDX_DEFAULTS); } catch { if (!alive()) stale(); return; }
     window.postMessage(
       { __yhdx: 'settings', settings, captionCss: yhdxBuildPageCss(settings) },
       location.origin
@@ -31,8 +43,7 @@
       duration: Number(req.duration) || 0,
       exclude: (Array.isArray(req.exclude) ? req.exclude : []).map(String).slice(0, 20),
     };
-    let result;
-    try { result = await chrome.runtime.sendMessage(msg); } catch { result = null; }
+    const result = await send(msg);
     window.postMessage(
       {
         __yhdx: 'lyrics', videoId: msg.videoId, cues: result?.cues ?? null,
@@ -74,8 +85,7 @@
       duration: Number(req.duration) || 0,
       exclude: (Array.isArray(req.exclude) ? req.exclude : []).map(String).slice(0, 20),
     };
-    let result;
-    try { result = await chrome.runtime.sendMessage(msg); } catch { result = null; }
+    const result = await send(msg);
     window.postMessage({ __yhdx: 'tidal-match', videoId: msg.videoId, track: result?.track ?? null,
       reason: result?.reason ?? null, signedOut: !!result?.signedOut, preview: !!result?.preview,
       via: result?.via === 'web' ? 'web' : null }, location.origin);
@@ -89,7 +99,7 @@
     for (const k of ['at', 'videoTime', 'rate', 'offset', 'volume', 'sentAt']) if (req[k] != null) msg[k] = Number(req[k]) || 0;
     if (req.playing != null) msg.playing = !!req.playing;
     if (req.via === 'web') msg.via = 'web';
-    chrome.runtime.sendMessage(msg).catch(() => {});
+    send(msg);
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
@@ -118,14 +128,14 @@
 
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data) return;
-    if (typeof e.data.__yhdx === 'string' && e.data.__yhdx.endsWith('-request') && !alive()) { stale(); return; }
+    if (typeof e.data.__yhdx === 'string' && !alive()) { stale(); return; } // cut off: nothing below can work
     if (e.data.__yhdx === 'ready') push();
     else if (e.data.__yhdx === 'lyrics-request') lyrics(e.data);
     else if (e.data.__yhdx === 'prefs-request') sendPrefs(e.data.videoId);
     else if (e.data.__yhdx === 'prefs-save') savePrefs(e.data.videoId, e.data.prefs);
     else if (e.data.__yhdx === 'tidal-match-request') tidalMatch(e.data);
     else if (e.data.__yhdx === 'tidal-audio') tidalAudio(e.data);
-    else if (e.data.__yhdx === 'tidal-focus') chrome.runtime.sendMessage({ type: 'tidal-focus' }).catch(() => {});
+    else if (e.data.__yhdx === 'tidal-focus') send({ type: 'tidal-focus' });
   });
   chrome.storage.onChanged.addListener((_changes, area) => { if (area === 'sync') push(); });
   push();

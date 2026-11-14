@@ -59,8 +59,10 @@
   const MAX_CHANGES = 2;
 
   function report(status, extra = {}) {
-    if (!current) return;
-    chrome.runtime.sendMessage({ type: 'tidal-web-status', status, trackId: current.trackId, ...extra }).catch(() => {});
+    if (!current || !alive()) return;
+    try {
+      chrome.runtime.sendMessage({ type: 'tidal-web-status', status, trackId: current.trackId, ...extra }).catch(() => {});
+    } catch { /* cut off */ }
   }
 
   async function waitFor(fn, ms) {
@@ -157,9 +159,13 @@
     }
   }
 
+  // The Player was updated or reloaded: this copy is cut off and nothing keeps TIDAL in step with the video any more.
+  const alive = () => { try { return !!chrome.runtime?.id; } catch { return false; } };
+
   function tick() {
     const c = current;
     if (!c) return;
+    if (!alive()) { stop(); return; } // fade out and pause (the new copy takes over once the page asks again)
     if (c.switching) return;
     if (c.waitingClick) {
       const playing = findPlaying();

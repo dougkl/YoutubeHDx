@@ -283,7 +283,11 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       sendMessage: async (m) => { sentToRuntime.push(m); },
     },
     tabs: {
-      sendMessage: async (id, m) => { sentToTabs.push([id, m]); },
+      sendMessage: async (id, m) => {
+        sentToTabs.push([id, m]);
+        if (tabs.deaf.includes(id)) throw new Error('Could not establish connection. Receiving end does not exist.');
+      },
+      reload: async (id) => { tabs.reloaded.push(id); },
       onRemoved: { addListener: (fn) => tabs.removed.push(fn) },
       get: async (id) => { const t = tabs.open.find((x) => x.id === id); if (!t) throw new Error('No tab with id'); return t; },
       query: async ({ url }) => tabs.open.filter((t) => [].concat(url).some((u) => t.url.startsWith(u.replace('*', '')))),
@@ -321,7 +325,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     },
   };
   const offscreen = { open: false, created: [] };
-  const tabs = { open: [], created: [], removed: [], updated: [], closed: [] };
+  const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [] };
   const windowsFocused = [];
   const dbg = { log: [], answer: 'row', refuse: false };
   let identity = async () => { throw new Error('no sign-in in this test'); };
@@ -382,7 +386,8 @@ export async function runBridge(saved = {}, { lyricsReply = null, onSend = () =>
   // The Player was updated/reloaded while this tab stayed open: chrome.* calls throw from now on.
   posted.invalidate = () => {
     delete chrome.runtime.id;
-    const dead = async () => { throw new Error('Extension context invalidated.'); };
+    // Like Chrome: the call itself throws (no rejected promise to .catch).
+    const dead = () => { throw new Error('Extension context invalidated.'); };
     chrome.runtime.sendMessage = dead;
     chrome.storage.local.get = dead; chrome.storage.local.set = dead; chrome.storage.local.remove = dead; chrome.storage.sync.get = dead;
   };

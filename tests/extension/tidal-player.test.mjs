@@ -199,6 +199,16 @@ describe('TIDAL audio for music videos', () => {
     assert.match(page.toastText(), /reload this page/);
   });
 
+  test('page left over from before an update while TIDAL played: YouTube\'s sound comes back', () => {
+    const page = playingTidal();
+    assert.equal(page.player.video.muted, true);
+    page.fireMessage({ __yhdx: 'stale' });
+    advance(800);
+    assert.equal(page.player.video.muted, false);
+    assert.equal(page.player.video.volume, 0.8);
+    assert.equal(page.inPlayer('yhdx-hq').length, 0);
+  });
+
   test('TIDAL tab blocked by Chrome: the note stays, clicking it asks for the TIDAL tab, and goes away once TIDAL plays', () => {
     const page = watch();
     page.sendTidalMatch('vid1', TRACK);
@@ -312,6 +322,10 @@ describe('bridge: TIDAL messages', () => {
     await posted.receive({ __yhdx: 'prefs-request', videoId: 'vid1abcdefg' });
     await posted.receive({ __yhdx: 'tidal-match-request', videoId: 'vid1abcdefg', title: 'A - B', author: 'A', duration: 200 });
     await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid1abcdefg', prefs: { audio: 'youtube' } });
+    // the video's clock (4 times a second) and the corner note's click must not throw either
+    for (let i = 0; i < 5; i++) await posted.receive({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: i, playing: true });
+    await posted.receive({ __yhdx: 'tidal-focus' });
+    await posted.receive({ __yhdx: 'ready' });
     const after = posted.slice(before);
     assert.equal(after.filter((m) => m.__yhdx === 'stale').length, 1);
   });
@@ -530,6 +544,20 @@ describe('service worker: TIDAL', () => {
     } finally {
       mock.timers.reset();
     }
+  });
+
+  test('a TIDAL tab open since before the Player was updated: reloaded so it gets the new script', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.tabs.open.push({ id: 77, url: 'https://tidal.com/album/1/track/2', status: 'complete' });
+    bg.tabs.deaf.push(77);
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(bg.tabs.reloaded, [77]);
+    bg.tabs.deaf.length = 0;
+    await bg.send({ type: 'tidal-web-hello' }, { tab: { id: 77, url: 'https://tidal.com/album/1/track/2' } });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.equal(bg.sentToTabs.filter(([id, m]) => id === 77 && m.cmd === 'load').length, 2, 'the song again, after the reload');
+    assert.equal(bg.tabs.created.length, 0);
   });
 
   test('a TIDAL tab you opened yourself stays open after the song', async () => {

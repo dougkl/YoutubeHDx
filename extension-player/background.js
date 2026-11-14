@@ -113,12 +113,18 @@ const TIDAL_LOG_MAX = 40;
 const trackLabel = (t) => (t ? `${t.artists?.[0] ?? ''} – ${t.title}${t.version ? ` (${t.version})` : ''} [${t.id}]` : '');
 const trackTitles = new Map(); // track id -> video title, so the player's answers can say which song
 
-async function tidalLog(entry) {
-  try {
-    const { tidalLog: log = [] } = await chrome.storage.local.get({ tidalLog: [] });
-    log.unshift({ at: Date.now(), ...entry });
-    await chrome.storage.local.set({ tidalLog: log.slice(0, TIDAL_LOG_MAX) });
-  } catch { /* the log is only a help */ }
+// One write at a time: two entries close together would otherwise each read the old log and one would be lost.
+let tidalLogQueue = Promise.resolve();
+function tidalLog(entry) {
+  const at = Date.now();
+  tidalLogQueue = tidalLogQueue.then(async () => {
+    try {
+      const { tidalLog: log = [] } = await chrome.storage.local.get({ tidalLog: [] });
+      log.unshift({ at, ...entry });
+      await chrome.storage.local.set({ tidalLog: log.slice(0, TIDAL_LOG_MAX) });
+    } catch { /* the log is only a help */ }
+  });
+  return tidalLogQueue;
 }
 
 function logMatch(msg, result, remembered) {
@@ -235,9 +241,13 @@ function closeWebTabSoon(id) {
 async function tidalWebAudio(msg, tabId) {
   if (msg.cmd === 'load') {
     cancelWebTabClose();
-    const { id } = await ensureWebTab(msg.trackId);
+    const { id, fresh } = await ensureWebTab(msg.trackId);
     webLoad = { ...msg, target: 'tidal-web' };
-    await chrome.tabs.sendMessage(id, webLoad).catch(() => {}); // a new tab gets it with its "hello"
+    // A new tab gets it with its "hello". A TIDAL tab open since before the Player was updated has no live copy of the
+    // Player's script (Chrome doesn't add it to open tabs): reload it, and it says hello.
+    const unheard = await chrome.tabs.sendMessage(id, webLoad).then(() => false,
+      (e) => /Receiving end does not exist|Could not establish connection/i.test(String(e?.message || e)));
+    if (unheard && !fresh && (await chrome.tabs.get(id).catch(() => null))?.status === 'complete') chrome.tabs.reload(id).catch(() => {});
     return;
   }
   const id = await webTab();
