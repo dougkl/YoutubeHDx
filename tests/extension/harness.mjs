@@ -295,7 +295,10 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       remove: async (id) => { tabs.closed.push(id); tabs.open = tabs.open.filter((t) => t.id !== id); for (const fn of tabs.removed) await fn(id); },
       update: async (id, o) => { tabs.updated.push([id, o]); const t = tabs.open.find((x) => x.id === id); return t ? { ...t, ...o } : null; },
     },
-    windows: { update: async (id) => { windowsFocused.push(id); } },
+    windows: {
+      update: async (id) => { windowsFocused.push(id); },
+      get: async (id) => ({ id, state: tabs.windowState ?? 'normal' }),
+    },
     debugger: {
       attach: async (target) => { if (dbg.refuse) throw new Error('Cannot attach'); dbg.log.push(['attach', target.tabId]); },
       sendCommand: async (target, method, params) => { dbg.log.push([method, target.tabId, params]); return { result: { value: dbg.answer } }; },

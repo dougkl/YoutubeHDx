@@ -508,7 +508,7 @@ describe('service worker: TIDAL', () => {
     assert.equal(bg.sentToTabs.filter(([id]) => id === 5).at(-1)[1].status, 'error');
   });
 
-  test('the song is over: the TIDAL tab the Player opened closes a little later; a next song in time keeps it', async () => {
+  test('the song is over: the TIDAL tab stays open (paused) and plays the next song, even much later', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
@@ -516,31 +516,73 @@ describe('service worker: TIDAL', () => {
       await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web' }, { tab: { id: 5 } });
       await flush();
       const web = bg.tabs.created[0].id;
-      await bg.send({ type: 'tidal-web-hello' }, { tab: { id: web, url: 'https://tidal.com/track/1' } });
-      await flush();
-      // a playlist: the next song comes before the tab would close
       await bg.send({ type: 'tidal-audio', cmd: 'stop' }, { tab: { id: 5 } });
       await flush();
-      mock.timers.tick(5000);
-      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
-      await flush();
-      mock.timers.tick(20000);
-      await flush();
-      assert.deepEqual(bg.tabs.closed, [], 'still open for the next song');
-      assert.equal(bg.tabs.created.length, 1);
-      // the end: closed 10 s later, and the next song opens a new one
-      await bg.send({ type: 'tidal-audio', cmd: 'stop' }, { tab: { id: 5 } });
-      await flush();
-      mock.timers.tick(9000);
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === web && m.cmd === 'stop').length, 1);
+      mock.timers.tick(30 * 60e3);
       await flush();
       assert.deepEqual(bg.tabs.closed, []);
-      mock.timers.tick(1100);
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
       await flush();
-      assert.deepEqual(bg.tabs.closed, [web]);
-      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'error').length, 0, 'no "TIDAL tab was closed" note');
-      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '3', at: 0, via: 'web' }, { tab: { id: 5 } });
+      assert.equal(bg.tabs.created.length, 1);
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === web && m.cmd === 'load').at(-1)[1].trackId, '2');
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test('a new TIDAL tab (Chrome holds its sound until it has been shown): shown for a moment, then back to the video', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+      const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+      bg.tabs.open.push({ id: 5, url: 'https://www.youtube.com/watch?v=x', windowId: 1, active: true });
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web' }, { tab: { id: 5 } });
       await flush();
-      assert.equal(bg.tabs.created.length, 2);
+      const web = bg.tabs.created[0].id;
+      bg.tabs.created[0].windowId = 1;
+      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      await flush();
+      assert.ok(bg.dbg.log.some(([m]) => m === 'Runtime.evaluate'), 'pressed Play first');
+      assert.deepEqual(bg.tabs.updated, []);
+      mock.timers.tick(1000);
+      await flush();
+      assert.equal(JSON.stringify(bg.tabs.updated), JSON.stringify([[web, { active: true }]]));
+      await bg.send({ type: 'tidal-web-status', status: 'loaded', trackId: '1' }, { tab: { id: web } });
+      await flush();
+      mock.timers.tick(1200);
+      await flush();
+      assert.equal(JSON.stringify(bg.tabs.updated.at(-1)), JSON.stringify([5, { active: true }]), 'the video is in front again');
+      mock.timers.tick(5000);
+      await flush();
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 0, 'nothing to ask you');
+      // next song in the same tab (it has played now): no showing
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '2' }, { tab: { id: web }, url: 'https://tidal.com/track/2' });
+      await flush();
+      mock.timers.tick(3000);
+      await flush();
+      assert.equal(bg.tabs.updated.length, 2);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
+  test('a new TIDAL tab while the video is full screen: not shown (the video stays full screen)', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+      const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+      bg.tabs.windowState = 'fullscreen';
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web' }, { tab: { id: 5 } });
+      await flush();
+      const web = bg.tabs.created[0].id;
+      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      await flush();
+      mock.timers.tick(6000);
+      await flush();
+      assert.deepEqual(bg.tabs.updated, []);
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 1, 'then it asks');
     } finally {
       mock.timers.reset();
     }
@@ -560,7 +602,7 @@ describe('service worker: TIDAL', () => {
     assert.equal(bg.tabs.created.length, 0);
   });
 
-  test('a TIDAL tab you opened yourself stays open after the song', async () => {
+  test('a TIDAL tab you opened yourself: used, and left open after the song', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
@@ -626,8 +668,16 @@ describe('service worker: TIDAL', () => {
     await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web' }, { tab: { id: 5 } });
     await new Promise((r) => setTimeout(r, 30));
     const web = bg.tabs.created[0].id;
-    await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '9' }, { tab: { id: web }, url: 'https://tidal.com/track/9' });
-    await new Promise((r) => setTimeout(r, 30));
+    bg.tabs.windowState = 'fullscreen'; // (no showing either)
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '9' }, { tab: { id: web }, url: 'https://tidal.com/track/9' });
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+      mock.timers.tick(5000);
+      for (let i = 0; i < 40; i++) await Promise.resolve();
+    } finally {
+      mock.timers.reset();
+    }
     assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 1);
   });
 
