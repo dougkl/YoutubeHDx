@@ -67,8 +67,8 @@
     if (offset) out.offset = offset;
     // TIDAL audio: 'youtube' = keep YouTube's sound for this video; offset = TIDAL earlier (-) / later (+);
     // rejectedTracks = TIDAL tracks you said are not the same recording.
-    if (p?.audio === 'youtube') out.audio = 'youtube';
-    const audioOffset = Math.max(-10, Math.min(10, Math.round((Number(p?.audioOffset) || 0) * 100) / 100));
+    if (p?.audio === 'youtube' || p?.audio === 'tidal') out.audio = p.audio; // 'tidal': TIDAL's nearest version anyway
+    const audioOffset = Math.max(-15, Math.min(15, Math.round((Number(p?.audioOffset) || 0) * 100) / 100));
     if (audioOffset) out.audioOffset = audioOffset;
     const rejectedTracks = (Array.isArray(p?.rejectedTracks) ? p.rejectedTracks : []).map(String).filter((x) => /^\d{1,15}$/.test(x)).slice(0, 20);
     if (rejectedTracks.length) out.rejectedTracks = rejectedTracks;
@@ -86,9 +86,12 @@
       exclude: (Array.isArray(req.exclude) ? req.exclude : []).map(String).slice(0, 20),
     };
     const result = await send(msg);
+    const n = result?.nearest;
+    const nearest = n && /^\d{1,15}$/.test(String(n.id)) ? { id: String(n.id), title: String(n.title || ''), version: n.version ? String(n.version) : null,
+      artists: (Array.isArray(n.artists) ? n.artists : []).map(String).slice(0, 5), seconds: Number(n.seconds) || 0 } : null;
     window.postMessage({ __yhdx: 'tidal-match', videoId: msg.videoId, track: result?.track ?? null,
       reason: result?.reason ?? null, signedOut: !!result?.signedOut, preview: !!result?.preview,
-      via: result?.via === 'web' ? 'web' : null }, location.origin);
+      via: result?.via === 'web' ? 'web' : null, nearest }, location.origin);
   }
 
   const AUDIO_CMDS = new Set(['load', 'clock', 'stop']);

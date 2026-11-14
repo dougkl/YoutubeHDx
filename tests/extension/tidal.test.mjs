@@ -112,6 +112,21 @@ describe('search through the official API', () => {
     assert.equal(r.track, null);
     assert.equal(r.reason, 'no same-length recording on TIDAL');
     assert.equal(r.lengths, 'video 3:10; TIDAL has 3:42, 3:59');
+    assert.equal(r.nearest, undefined, '32 s apart: not offered');
+  });
+
+  test('a miss within 10 s offers TIDAL\'s closest version (you sync it)', async () => {
+    const { fetchFn } = api([
+      [/searchResults/, { data: [{ relationships: { tracks: { data: [{ id: '1' }, { id: '2' }] } } }] }],
+      [/\/tracks\?/, { data: [
+        { id: '1', attributes: { title: 'Save Tonight', duration: 'PT3M59S' }, relationships: { artists: { data: [{ id: 'e' }] } } },
+        { id: '2', attributes: { title: 'Save Tonight', duration: 'PT3M18S' }, relationships: { artists: { data: [{ id: 'e' }] } } }],
+        included: [{ id: 'e', type: 'artists', attributes: { name: 'Eagle-Eye Cherry' } }] }],
+    ]);
+    const r = await T.yhdxTidalFind({ title: 'Eagle-Eye Cherry - Save Tonight', author: 'Eagle-Eye Cherry', duration: 190.1 }, { fetchFn, token: 'tok' });
+    assert.equal(r.track, null);
+    assert.equal(r.nearest.id, '2');
+    assert.equal(r.nearest.seconds, 198);
   });
 
   test('skips tracks you said are wrong', async () => {

@@ -7,6 +7,7 @@
 
 const YHDX_TIDAL_API = 'https://openapi.tidal.com/v2';
 const YHDX_TIDAL_TOLERANCE_S = 2;     // TIDAL track length must be within this of the video's
+const YHDX_TIDAL_MANUAL_S = 10;       // otherwise you may still pick TIDAL's version if it's this close (you sync it)
 
 // ---------------------------------------------------------------- song names
 
@@ -195,15 +196,21 @@ async function yhdxTidalFind({ title, author, duration }, { fetchFn, token, coun
   if (!(duration > 0)) return { track: null, reason: 'video length unknown' };
   const queries = [...new Set([`${video.artist} ${video.track}`, `${yhdxCleanChannel(author)} ${video.track}`].map((q) => q.trim()).filter(Boolean))];
   const sameSong = new Set(); // lengths of TIDAL's versions of this song, to explain a miss
+  let nearest = null;         // the closest of them, if within YHDX_TIDAL_MANUAL_S: offered in the ⇄ menu
   for (const query of queries) {
     const tracks = (await yhdxTidalSearch(query, { fetchFn, token, country })).filter((t) => !exclude.includes(t.id));
     const track = yhdxTidalPick(video, duration, tracks);
     if (track) return { track, query };
-    for (const t of tracks) if (t.seconds > 0 && yhdxTidalSameSong(video, t)) sameSong.add(Math.round(t.seconds));
+    for (const t of tracks) {
+      if (!(t.seconds > 0) || !yhdxTidalSameSong(video, t)) continue;
+      sameSong.add(Math.round(t.seconds));
+      const diff = Math.abs(t.seconds - duration);
+      if (diff <= YHDX_TIDAL_MANUAL_S && (!nearest || diff < Math.abs(nearest.seconds - duration))) nearest = t;
+    }
   }
   if (!sameSong.size) return { track: null, reason: 'song not found on TIDAL' };
   const mmss = (x) => { const s = Math.round(x); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  return { track: null, reason: 'no same-length recording on TIDAL',
+  return { track: null, reason: 'no same-length recording on TIDAL', ...(nearest ? { nearest } : {}),
            lengths: `video ${mmss(duration)}; TIDAL has ${[...sameSong].sort((a, b) => a - b).map(mmss).join(', ')}` };
 }
 

@@ -202,7 +202,12 @@
     const target = k.videoTime + (k.playing ? ((Date.now() - k.sentAt) / 1000) * k.rate : 0) + (k.offset || 0);
     // Never to the end of TIDAL's song: TIDAL would go on to another song by itself.
     const atEnd = Number.isFinite(m.duration) && m.duration > 1 && target >= m.duration - 0.3;
-    if (!k.playing || target < 0 || atEnd) { setPlaying(false, m); return; }
+    if (!k.playing || target < 0 || atEnd) {
+      // TIDAL's song has nothing here (the video's longer intro or ending): the video's own sound meanwhile.
+      if (k.playing && c.reported) { c.reported = false; report('gap'); }
+      setPlaying(false, m);
+      return;
+    }
     if (m.paused) {
       if (!m.seeking && Math.abs(m.currentTime - target) > 0.35) m.currentTime = Math.max(0, target);
       if (!c.reported && c.vol == null) { c.vol = m.volume || 1; m.volume = 0; } // silent until the crossfade

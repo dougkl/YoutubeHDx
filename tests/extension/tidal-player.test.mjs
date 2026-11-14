@@ -193,6 +193,74 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.player.video.muted, false);
   });
 
+  test('TIDAL\'s version a few seconds off: "Use TIDAL anyway" in the ⇄ menu, then sync it by hand or keep YouTube\'s sound', () => {
+    const page = watch();
+    const nearest = { id: '55', title: 'Major Tom', version: null, artists: ['Peter Schilling'], seconds: 306 };
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL', nearest });
+    assert.equal(audioMsgs(page, 'load').length, 0, 'not by itself');
+    page.syncButton().click();
+    assert.deepEqual(page.menuItems().filter((x) => /anyway/.test(x)), [
+      'Use TIDAL anyway: TIDAL has a longer intro (skips its first 6 s) · TIDAL 5:06, video 5:00',
+      'Use TIDAL anyway: TIDAL has a longer ending · TIDAL 5:06, video 5:00',
+    ]);
+    page.chooseMenu('Use TIDAL anyway: TIDAL has a longer ending · TIDAL 5:06, video 5:00');
+    assert.equal(page.savedPrefs.vid1.audio, 'tidal');
+    assert.equal(page.savedPrefs.vid1.audioOffset, 0);
+    const asks = page.posted.filter((m) => m.__yhdx === 'tidal-match-request');
+    assert.equal(asks.length, 2);
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL', nearest });
+    assert.equal(audioMsgs(page, 'load').at(-1).trackId, '55');
+    assert.equal(audioMsgs(page, 'load').at(-1).via, 'web');
+    page.sendAudioStatus('loaded', { trackId: '55' });
+    page.sendAudioStatus('playing', { trackId: '55' });
+    advance(1600);
+    assert.equal(page.player.video.muted, true);
+    page.syncButton().click();
+    const items = page.menuItems();
+    assert.ok(items.includes('TIDAL sound is late: play it 1 s earlier'));
+    assert.ok(items.includes('TIDAL sound is early: play it 1 s later'));
+    assert.ok(!items.includes('Not the same recording: try another TIDAL track'));
+    page.chooseMenu('TIDAL sound is late: play it 1 s earlier');
+    assert.equal(page.savedPrefs.vid1.audioOffset, 1);
+    assert.equal(audioMsgs(page, 'clock').at(-1).offset, 1);
+    page.syncButton().click();
+    page.chooseMenu("Keep YouTube's sound for this video (as before)");
+    assert.equal(page.savedPrefs.vid1.audio, 'youtube');
+    assert.equal(audioMsgs(page, 'stop').length, 1);
+    advance(800);
+    assert.equal(page.player.video.muted, false);
+  });
+
+  test('TIDAL shorter, the video has a longer intro: TIDAL starts later; YouTube\'s sound where TIDAL has nothing', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL', nearest: { id: '55', title: 'Major Tom', artists: ['Peter Schilling'], seconds: 293 } });
+    page.syncButton().click();
+    page.chooseMenu('Use TIDAL anyway: the video has a longer intro (TIDAL starts at 0:07) · TIDAL 4:53, video 5:00');
+    assert.equal(page.savedPrefs.vid1.audioOffset, -7);
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL', nearest: { id: '55', title: 'Major Tom', artists: ['Peter Schilling'], seconds: 293 } });
+    assert.equal(audioMsgs(page, 'clock').at(-1).offset, -7);
+    page.sendAudioStatus('playing', { trackId: '55' });
+    advance(1600);
+    assert.equal(page.player.video.muted, true);
+    // the video's ending goes on after TIDAL's song: YouTube's sound comes back, no silence
+    page.sendAudioStatus('gap', { trackId: '55' });
+    advance(800);
+    assert.equal(page.player.video.muted, false);
+    assert.equal(page.player.video.volume, 0.8);
+    // you go back: TIDAL plays again, YouTube fades out again
+    page.sendAudioStatus('playing', { trackId: '55' });
+    advance(1600);
+    assert.equal(page.player.video.muted, true);
+    assert.equal(page.inPlayer('yhdx-hq').length, 1);
+  });
+
+  test('TIDAL\'s version too far off (no closest one offered): no "Use TIDAL anyway"', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'no same-length recording on TIDAL' });
+    page.syncButton().click(); // (it shows for the subtitles here)
+    assert.ok(!page.menuItems().some((x) => /TIDAL anyway/.test(x)));
+  });
+
   test('page left over from before an update: tells you to reload it', () => {
     const page = watch();
     page.fireMessage({ __yhdx: 'stale' });
@@ -335,6 +403,10 @@ describe('bridge: TIDAL messages', () => {
     const posted = await runBridge({}, { local });
     await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid1abcdefg', prefs: { audio: 'youtube', audioOffset: 0.123, rejectedTracks: ['77', 'x'], junk: 1 } });
     assert.deepEqual(JSON.parse(JSON.stringify(local['prefs:vid1abcdefg'])), { audio: 'youtube', audioOffset: 0.12, rejectedTracks: ['77'] });
+    await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid1abcdefg', prefs: { audio: 'tidal', audioOffset: -12.5 } });
+    assert.deepEqual(JSON.parse(JSON.stringify(local['prefs:vid1abcdefg'])), { audio: 'tidal', audioOffset: -12.5 });
+    await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid1abcdefg', prefs: { audio: 'other' } });
+    assert.equal(local['prefs:vid1abcdefg'], undefined);
   });
 });
 
@@ -372,7 +444,7 @@ describe('service worker: TIDAL', () => {
     bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, result: { track: null, reason: 'no same-length recording on TIDAL' } };
     assert.equal((await bg.send(video)).track.id, '9');
     assert.ok(calls.length > 0);
-    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, rules: 2, result: { track: null, reason: 'song not found on TIDAL' } };
+    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, rules: 3, result: { track: null, reason: 'song not found on TIDAL' } };
     const n = calls.length;
     assert.equal((await bg.send(video)).track, null);
     assert.equal(calls.length, n);

@@ -239,7 +239,7 @@
       else controls.prepend(b);
       ui.button = b;
     }
-    ui.button.style.display = current || hasPrefs() || audio.status === 'on' ? '' : 'none';
+    ui.button.style.display = current || hasPrefs() || audio.status === 'on' || audio.status === 'gap' || audio.nearest ? '' : 'none';
   }
 
   function closeMenu() {
@@ -400,6 +400,7 @@
     audio.requested = vd.video_id;
     audio.videoId = vd.video_id;
     audio.status = 'finding';
+    audio.nearest = null;
     window.postMessage({ __yhdx: 'tidal-match-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration,
                          exclude: state.prefs.rejectedTracks ?? [] }, location.origin);
     return true;
@@ -408,8 +409,12 @@
   function onAudioMatch(data) {
     const p = getPlayer();
     if (data.videoId !== audio.videoId || data.videoId !== p?.getVideoData?.()?.video_id || audio.status !== 'finding') return;
+    // You chose TIDAL's version anyway for this video (lengths differ a little; you sync it with the ⇄ menu).
+    if (!data.track && data.nearest && state.prefs?.audio === 'tidal' && settings?.tidalAudio) data = { ...data, track: data.nearest, via: 'web', chosen: true };
     if (!data.track) {
       audio.status = data.preview ? 'preview' : 'none';
+      audio.nearest = data.nearest || null;
+      updateSyncButton();
       if (data.signedOut && !audio.signInHintShown) {
         audio.signInHintShown = true;
         toast('TIDAL audio: sign in to TIDAL in the YoutubeHDx Player settings');
@@ -420,6 +425,7 @@
     }
     if (!audioEligible()) { audio.status = 'idle'; return; }
     audio.track = data.track;
+    audio.chosen = !!data.chosen;
     audio.status = 'loading';
     const offset = Number(state.prefs?.audioOffset) || 0;
     audio.via = data.via === 'web' ? 'web' : null;
@@ -439,11 +445,19 @@
         break;
       case 'playing':
         if (audio.status !== 'on') {
+          const back = audio.status === 'gap';
           audio.status = 'on';
-          audio.quality = data.quality;
+          audio.quality = data.quality || audio.quality;
           if (!isAd(getPlayer())) fadeYoutube(true, FADE_IN_TIDAL_MS); // TIDAL fades in at the same time
-          showHqBadge();
+          if (!back) showHqBadge();
           updateSyncButton();
+        }
+        break;
+      case 'gap':
+        // TIDAL's song has nothing at this point of the video (a longer intro or ending): YouTube's sound meanwhile.
+        if (audio.status === 'on') {
+          audio.status = 'gap';
+          fadeYoutube(false, FADE_BACK_MS);
         }
         break;
       case 'preview':
@@ -639,28 +653,57 @@
   }
 
   function describeAudio() {
-    if (audio.status === 'on') {
+    if (audio.status === 'on' || audio.status === 'gap') {
       const offset = Number(state.prefs?.audioOffset) || 0;
       const t = audio.track;
       return `Audio: TIDAL${audio.via === 'web' ? ' (your TIDAL tab)' : ''} · ${t.artists?.[0] ?? ''} – ${t.version ? `${t.title} (${t.version})` : t.title}` +
+        (audio.chosen ? ` · your choice, TIDAL ${mmss(t.seconds)} vs video ${mmss(getPlayer()?.getDuration?.())}` : '') +
         (offset ? ` · ${offset > 0 ? '+' : ''}${offset.toFixed(2)} s` : '');
     }
     if (state.prefs?.audio === 'youtube') return "Audio: YouTube's sound (your choice for this video)";
+    if (audio.status === 'none' && audio.nearest) return `Audio: YouTube's sound (TIDAL's version is ${mmss(audio.nearest.seconds)}, the video ${mmss(getPlayer()?.getDuration?.())})`;
     if (audio.status === 'preview') return "Audio: YouTube's sound (TIDAL has only a 30-second preview of this song)";
     return '';
   }
 
   function audioMenuItems() {
     const items = [];
-    if (audio.status === 'on') {
+    if (audio.status === 'on' || audio.status === 'gap') {
+      if (audio.chosen) items.push(["TIDAL sound is late: play it 1 s earlier", () => nudgeAudio(+1)]);
       items.push(["TIDAL sound is late: play it 0.1 s earlier", () => nudgeAudio(+0.1)]);
       items.push(["TIDAL sound is early: play it 0.1 s later", () => nudgeAudio(-0.1)]);
-      items.push(['Not the same recording: try another TIDAL track', rejectTrack]);
-      items.push(["Use YouTube's sound for this video", useYoutubeAudio]);
+      if (audio.chosen) items.push(["TIDAL sound is early: play it 1 s later", () => nudgeAudio(-1)]);
+      if (!audio.chosen) items.push(['Not the same recording: try another TIDAL track', rejectTrack]);
+      items.push([audio.chosen ? "Keep YouTube's sound for this video (as before)" : "Use YouTube's sound for this video", useYoutubeAudio]);
+    } else if (audio.status === 'none' && audio.nearest && settings?.tidalAudio) {
+      // Where is the extra part? Its length (d) sets where TIDAL starts; the 1 s / 0.1 s steps fine-tune it after.
+      const d = Math.round((Number(audio.nearest.seconds) || 0) - (Number(getPlayer()?.getDuration?.()) || 0));
+      const lens = `TIDAL ${mmss(audio.nearest.seconds)}, video ${mmss(getPlayer()?.getDuration?.())}`;
+      if (d < 0) {
+        items.push([`Use TIDAL anyway: the video has a longer intro (TIDAL starts at ${mmss(-d)}) · ${lens}`, () => useTidalAnyway(d)]);
+        items.push([`Use TIDAL anyway: the video has a longer ending · ${lens}`, () => useTidalAnyway(0)]);
+      } else {
+        items.push([`Use TIDAL anyway: TIDAL has a longer intro (skips its first ${d} s) · ${lens}`, () => useTidalAnyway(d)]);
+        items.push([`Use TIDAL anyway: TIDAL has a longer ending · ${lens}`, () => useTidalAnyway(0)]);
+      }
     } else if (state.prefs?.audio === 'youtube' && settings?.tidalAudio) {
       items.push(["Use TIDAL's sound for this video", useTidalAudio]);
     }
     return items;
+  }
+
+  const mmss = (x) => { const v = Math.round(Number(x) || 0); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; };
+
+  // TIDAL's version is a little longer or shorter than the video (another intro or ending): play it anyway; the ⇄ menu
+  // then moves it earlier/later until it fits. Remembered for this video.
+  function useTidalAnyway(offset) {
+    const prefs = (state.prefs ||= {});
+    prefs.audio = 'tidal';
+    prefs.audioOffset = offset;
+    savePrefs();
+    audio.requested = null;
+    audio.status = 'idle';
+    requestAudio(getPlayer());
   }
 
   function nudgeAudio(delta) {
@@ -691,7 +734,7 @@
   }
 
   function useTidalAudio() {
-    if (state.prefs) delete state.prefs.audio;
+    if (state.prefs) { delete state.prefs.audio; state.prefs.audioOffset = 0; }
     savePrefs();
     audio.requested = null;
     audio.status = 'idle';
