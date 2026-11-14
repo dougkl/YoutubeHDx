@@ -602,6 +602,21 @@ describe('service worker: TIDAL', () => {
     assert.equal(bg.tabs.created.length, 0);
   });
 
+  test('a TIDAL tab Chrome restored after a restart (not loaded yet): reloaded; one still loading is left alone', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.tabs.open.push({ id: 78, url: 'https://tidal.com/album/1/track/2', status: 'unloaded', discarded: true });
+    bg.tabs.deaf.push(78);
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(bg.tabs.reloaded, [78]);
+    const bg2 = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg2.tabs.open.push({ id: 79, url: 'https://tidal.com/', status: 'loading' });
+    bg2.tabs.deaf.push(79);
+    await bg2.send({ type: 'tidal-audio', cmd: 'load', trackId: '2', at: 0, via: 'web' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    assert.deepEqual(bg2.tabs.reloaded, []);
+  });
+
   test('a TIDAL tab you opened yourself: used, and left open after the song', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {

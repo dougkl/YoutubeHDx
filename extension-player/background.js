@@ -251,7 +251,9 @@ async function tidalWebAudio(msg, tabId) {
     // Player's script (Chrome doesn't add it to open tabs): reload it, and it says hello.
     const unheard = await chrome.tabs.sendMessage(id, webLoad).then(() => false,
       (e) => /Receiving end does not exist|Could not establish connection/i.test(String(e?.message || e)));
-    if (unheard && !fresh && (await chrome.tabs.get(id).catch(() => null))?.status === 'complete') chrome.tabs.reload(id).catch(() => {});
+    // (Also a tab Chrome restored after a restart but hasn't loaded yet.) One still loading says hello by itself.
+    const tab = unheard && !fresh ? await chrome.tabs.get(id).catch(() => null) : null;
+    if (tab && (tab.status !== 'loading' || tab.discarded)) chrome.tabs.reload(id).catch(() => {});
     return;
   }
   const id = await webTab();
