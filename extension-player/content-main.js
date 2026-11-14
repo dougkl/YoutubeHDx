@@ -195,7 +195,8 @@
   background: rgba(0,0,0,.55); color: #fff; font: 500 13px Roboto, Arial, sans-serif; pointer-events: none;
   opacity: 0; transition: opacity 1.2s ease, bottom .25s ease, padding .6s ease, font-size .6s ease; white-space: nowrap; }
 .yhdx-hq.yhdx-show { opacity: .85; }
-.yhdx-hq.yhdx-mini { opacity: .28; padding: 3px 9px; font-size: 11px; }
+.yhdx-hq.yhdx-mini { opacity: .55; padding: 3px 9px; font-size: 11px; }
+.yhdx-hq.yhdx-mini.yhdx-hires { opacity: .28; }
 .yhdx-hq.yhdx-mini.yhdx-toggle:hover { opacity: .9; }
 .yhdx-hq.yhdx-note.yhdx-show { opacity: .65; }
 .yhdx-hq.yhdx-click { pointer-events: auto; cursor: pointer; opacity: .9; }
@@ -693,6 +694,7 @@
       if (ui.hq !== el) return;
       el.textContent = `♪ TIDAL${q ? ` ${q}` : ''}`;
       el.classList?.add('yhdx-mini');
+      if (q === 'Hi-Res') el.classList?.add('yhdx-hires'); // the best: the faintest label
     }, 5000);
   }
 

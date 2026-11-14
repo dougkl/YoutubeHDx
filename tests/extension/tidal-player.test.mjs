@@ -106,6 +106,19 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.player.video.muted, true);
   });
 
+  test('the small label: Hi-Res faintest, Lossless easier to see', () => {
+    const hi = playingTidal(); // HI_RES_LOSSLESS
+    advance(5000);
+    assert.match(hi.inPlayer('yhdx-hq')[0].className, /yhdx-mini.*yhdx-hires/);
+    const page = watch();
+    page.sendTidalMatch('vid1', TRACK);
+    page.sendAudioStatus('playing', { trackId: TRACK.id, quality: 'LOSSLESS' });
+    advance(6000);
+    const el = page.inPlayer('yhdx-hq')[0];
+    assert.equal(el.textContent, '♪ TIDAL Lossless');
+    assert.doesNotMatch(el.className, /yhdx-hires/);
+  });
+
   test('YouTube un-muting the element by itself is undone', () => {
     const page = playingTidal();
     page.player.video.muted = false;
