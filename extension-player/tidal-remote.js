@@ -134,6 +134,7 @@
       return false;
     }
     const playingAlready = row.getAttribute('data-test-is-playing') === 'true' && findPlaying() && isOurs(c);
+    c.audible = !!playingAlready; // you're already hearing it (you chose it in this tab): no fade-in from silence
     if (!playingAlready) {
       c.el = null;
       (q('[data-test="play-button"]', row) || row).click();
@@ -251,7 +252,7 @@
     if (!c.reported) {
       c.reported = true;
       if (c.vol == null) c.vol = m.volume || 1;
-      fadeMedia(m, 0, c.vol, FADE_IN_MS, null, c.vol); // the video fades out at the same time
+      if (!c.audible) fadeMedia(m, 0, c.vol, FADE_IN_MS, null, c.vol); // the video fades out at the same time
       report('playing', { quality: quality() });
     }
     // "Hear both" (the Sync window): TIDAL a bit quieter alongside the video's sound; back to your volume after.
@@ -268,8 +269,26 @@
     else if (Math.abs(m.playbackRate - step.rate) > 0.0005) m.playbackRate = step.rate;
   }
 
-  chrome.runtime.onMessage.addListener((msg) => {
+  // The song in TIDAL's player bar and where it is: for "Use the song in my TIDAL tab for this video".
+  function nowPlaying() {
+    const bar = footer();
+    const id = tidalTrack();
+    if (!bar || !id) return null;
+    const m = findPlaying() || [...document.querySelectorAll('video, audio')].find((x) => x.currentSrc && x.readyState >= 1) || null;
+    return {
+      id,
+      title: (q('[data-test="footer-track-title"]', bar)?.innerText || '').trim().slice(0, 200),
+      artist: (q('a[href*="/artist/"]', bar)?.innerText || '').trim().slice(0, 200),
+      seconds: m && Number.isFinite(m.duration) ? Math.round(m.duration) : 0,
+      at: m ? m.currentTime : 0,
+      playing: !!(m && !m.paused),
+      sentAt: Date.now(),
+    };
+  }
+
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.target !== 'tidal-web') return false;
+    if (msg.cmd === 'which') { sendResponse(nowPlaying()); return false; }
     if (msg.cmd === 'load') load(msg);
     else if (msg.cmd === 'clock' && current && String(msg.trackId) === current.trackId) {
       current.clock = { videoTime: Number(msg.videoTime) || 0, playing: !!msg.playing, rate: Number(msg.rate) || 1,

@@ -43,7 +43,7 @@ describe('the out-of-sync button', () => {
     assert.equal(btn.attrs['aria-label'], 'Subtitles and audio: out of sync?');
     btn.click();
     assert.match(page.menu().children[0].textContent, /Showing: English/);
-    assert.deepEqual(page.menuItems(), ['Out of sync: try other subtitles', 'Turn subtitles off for this video']);
+    assert.deepEqual(page.menuItems().filter((x) => !/TIDAL/.test(x)), ['Out of sync: try other subtitles', 'Turn subtitles off for this video']);
     btn.click();
     assert.equal(page.menu(), undefined); // second click closes it
   });
@@ -97,7 +97,7 @@ describe('the out-of-sync button', () => {
   test('lyrics out of sync: that set is rejected and the next match is asked for', () => {
     const page = watchWithLyrics();
     page.syncButton().click();
-    assert.deepEqual(page.menuItems(), [
+    assert.deepEqual(page.menuItems().filter((x) => !/TIDAL/.test(x)), [
       'Out of sync: try other lyrics', 'Show lyrics 0.5 s earlier', 'Show lyrics 0.5 s later', 'Turn subtitles off for this video',
     ]);
     page.chooseMenu('Out of sync: try other lyrics');
@@ -145,7 +145,7 @@ describe('the out-of-sync button', () => {
     assert.equal(trackSets(again).filter((c) => c[3]?.languageCode).length, 0);
     assert.equal(lyricsRequests(again).length, 0);
     again.syncButton().click();
-    assert.deepEqual(again.menuItems(), ['Reset subtitles and audio for this video']);
+    assert.deepEqual(again.menuItems().filter((x) => !/TIDAL/.test(x)), ['Reset subtitles and audio for this video']);
 
     again.player.calls.length = 0;
     again.chooseMenu('Reset subtitles and audio for this video');

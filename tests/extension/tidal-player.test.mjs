@@ -339,6 +339,42 @@ describe('TIDAL audio for music videos', () => {
     assert.ok(!page.menuItems().some((x) => /TIDAL anyway/.test(x)));
   });
 
+  test('"Use the song in my TIDAL tab": takes it where it is (your sync), remembered for this video', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'song not found on TIDAL' });
+    page.syncButton().click();
+    page.chooseMenu('Use the song in my TIDAL tab for this video (keeps your sync)');
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-pick-request').length, 1);
+    // your TIDAL tab plays it 3.5 s ahead of the video (the video is at 42 s)
+    page.fireMessage({ __yhdx: 'tidal-pick', track: { id: '777', title: 'Major Tom (Völlig Losgelöst)', artist: 'Peter Schilling', seconds: 300,
+      at: 45.5, playing: true, sentAt: Date.now() } });
+    const saved = page.savedPrefs.vid1;
+    assert.equal(JSON.stringify(saved.pickedTrack), JSON.stringify({ id: '777', title: 'Major Tom (Völlig Losgelöst)', artist: 'Peter Schilling', seconds: 300 }));
+    assert.equal(saved.audioOffset, 3.5);
+    assert.match(page.toastText(), /TIDAL for this video: Peter Schilling – Major Tom/);
+    // the Player asks again and plays your song, whatever TIDAL's search says
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
+    page.sendTidalMatch('vid1', { id: '999', title: 'Major Tom', artists: ['Peter Schilling'] });
+    const load = audioMsgs(page, 'load').at(-1);
+    assert.equal(load.trackId, '777');
+    assert.equal(load.via, 'web');
+    assert.equal(audioMsgs(page, 'clock').at(-1).offset, 3.5);
+    page.sendAudioStatus('playing', { trackId: '777' });
+    advance(1600);
+    page.syncButton().click();
+    assert.ok(page.menuItems().includes("Keep YouTube's sound for this video (as before)"));
+  });
+
+  test('"Use the song in my TIDAL tab" with nothing there: says so', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'song not found on TIDAL' });
+    page.syncButton().click();
+    page.chooseMenu('Use the song in my TIDAL tab for this video (keeps your sync)');
+    page.fireMessage({ __yhdx: 'tidal-pick', track: null });
+    assert.match(page.toastText(), /Play the song in your TIDAL tab first/);
+    assert.equal(page.savedPrefs.vid1?.pickedTrack, undefined);
+  });
+
   test('page left over from before an update: tells you to reload it', () => {
     const page = watch();
     page.fireMessage({ __yhdx: 'stale' });
@@ -653,6 +689,20 @@ describe('service worker: TIDAL', () => {
     assert.equal(log[0].video, 'Robbie Williams - Angels');
     await bg.send({ type: 'tidal-log-clear' }, { url: 'chrome-extension://test/options.html' });
     assert.equal(bg.local.tidalLog, undefined);
+  });
+
+  test('"Use the song in my TIDAL tab": the song in your TIDAL tab\'s player bar, and where it is', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    bg.tabs.open.push({ id: 70, url: 'https://tidal.com/search?q=x', windowId: 1 });
+    const r0 = await bg.send({ type: 'tidal-pick', title: 'Peter Schilling - Major Tom' }, { tab: { id: 5 } });
+    assert.equal(r0, null, 'nothing in its player bar');
+    bg.tabs.answer[70] = (m) => (m.cmd === 'which' ? { id: '777', title: 'Major Tom', artist: 'Peter Schilling', seconds: 300, at: 12, playing: true, sentAt: 1 } : undefined);
+    const r = await bg.send({ type: 'tidal-pick', title: 'Peter Schilling - Major Tom' }, { tab: { id: 5 } });
+    assert.equal(r.id, '777');
+    assert.equal(bg.session.tidalWebTab, 70, 'that tab is the TIDAL tab now');
+    await new Promise((res) => setTimeout(res, 20));
+    assert.match(bg.local.tidalLog[0].outcome, /you chose the song in your TIDAL tab/);
+    assert.equal(bg.local.tidalLog[0].video, 'Peter Schilling - Major Tom');
   });
 
   test('the Sync window: a small popup, where you left it last time, one at a time; it talks to the video\'s tab only', async () => {

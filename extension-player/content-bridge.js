@@ -68,8 +68,14 @@
     // TIDAL audio: 'youtube' = keep YouTube's sound for this video; offset = TIDAL earlier (-) / later (+);
     // rejectedTracks = TIDAL tracks you said are not the same recording.
     if (p?.audio === 'youtube' || p?.audio === 'tidal') out.audio = p.audio; // 'tidal': TIDAL's nearest version anyway
-    const audioOffset = Math.max(-15, Math.min(15, Math.round((Number(p?.audioOffset) || 0) * 100) / 100));
+    const audioOffset = Math.max(-600, Math.min(600, Math.round((Number(p?.audioOffset) || 0) * 100) / 100));
     if (audioOffset) out.audioOffset = audioOffset;
+    // The TIDAL song you chose yourself (in your TIDAL tab) for this video.
+    const t = p?.pickedTrack;
+    if (t && /^\d{1,15}$/.test(String(t.id))) {
+      out.pickedTrack = { id: String(t.id), title: String(t.title || '').slice(0, 200), artist: String(t.artist || '').slice(0, 200),
+                          seconds: Math.max(0, Math.round(Number(t.seconds) || 0)) };
+    }
     const rejectedTracks = (Array.isArray(p?.rejectedTracks) ? p.rejectedTracks : []).map(String).filter((x) => /^\d{1,15}$/.test(x)).slice(0, 20);
     if (rejectedTracks.length) out.rejectedTracks = rejectedTracks;
     return out;
@@ -147,6 +153,13 @@
     else if (e.data.__yhdx === 'tidal-audio') tidalAudio(e.data);
     else if (e.data.__yhdx === 'tidal-focus') send({ type: 'tidal-focus' });
     else if (e.data.__yhdx === 'tidal-sync-open') send({ type: 'tidal-sync-open' });
+    else if (e.data.__yhdx === 'tidal-pick-request') {
+      send({ type: 'tidal-pick', title: String(e.data.title || '').slice(0, 300) }).then((now) => {
+        const ok = now && /^\d{1,15}$/.test(String(now.id));
+        window.postMessage({ __yhdx: 'tidal-pick', track: ok ? { id: String(now.id), title: String(now.title || ''), artist: String(now.artist || ''),
+          seconds: Number(now.seconds) || 0, at: Number(now.at) || 0, playing: !!now.playing, sentAt: Number(now.sentAt) || 0 } : null }, location.origin);
+      });
+    }
     else if (e.data.__yhdx === 'tidal-sync-state') {
       const d = e.data;
       send({ type: 'tidal-sync-state', title: String(d.title || '').slice(0, 200), offset: Number(d.offset) || 0, both: !!d.both,

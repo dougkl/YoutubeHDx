@@ -414,6 +414,11 @@
   function onAudioMatch(data) {
     const p = getPlayer();
     if (data.videoId !== audio.videoId || data.videoId !== p?.getVideoData?.()?.video_id || audio.status !== 'finding') return;
+    // The song you chose yourself in your TIDAL tab for this video: always that one.
+    const picked = state.prefs?.pickedTrack;
+    if (picked && settings?.tidalAudio) {
+      data = { ...data, track: { id: picked.id, title: picked.title, artists: picked.artist ? [picked.artist] : [], seconds: picked.seconds }, via: 'web', chosen: true };
+    }
     // You chose TIDAL's version anyway for this video (lengths differ a little; you sync it with the ⇄ menu).
     if (!data.track && data.nearest && state.prefs?.audio === 'tidal' && settings?.tidalAudio) data = { ...data, track: data.nearest, via: 'web', chosen: true };
     if (!data.track) {
@@ -795,7 +800,11 @@
       if (audio.chosen) items.push(["TIDAL sound is early: play it 1 s later", () => nudgeAudio(-1)]);
       if (!audio.chosen) items.push(['Not the same recording: try another TIDAL track', rejectTrack]);
       items.push([audio.chosen ? "Keep YouTube's sound for this video (as before)" : "Use YouTube's sound for this video", useYoutubeAudio]);
-    } else if (audio.needClick && audio.track) {
+      return items;
+    }
+    // Not playing TIDAL: you can always give the Player the song you found yourself in your TIDAL tab.
+    if (settings?.tidalAudio) items.push(['Use the song in my TIDAL tab for this video (keeps your sync)', pickFromTidalTab]);
+    if (audio.needClick && audio.track) {
       items.push(["TIDAL didn't start: open the TIDAL tab (press Play there)", openTidalTab]);
       items.push(["Use YouTube's sound for this video", useYoutubeAudio]);
     } else if (audio.status === 'none' && audio.nearest && settings?.tidalAudio) {
@@ -819,6 +828,35 @@
     return items;
   }
 
+  // You found the song yourself in your TIDAL tab (and maybe synced it by ear): the Player takes it over where it is,
+  // and remembers it (and that sync) for this video.
+  function pickFromTidalTab() {
+    window.postMessage({ __yhdx: 'tidal-pick-request', title: getPlayer()?.getVideoData?.()?.title || '' }, location.origin);
+  }
+
+  function onTidalPick(d) {
+    const p = getPlayer();
+    const t = d.track;
+    if (!t || !p) { toast('Play the song in your TIDAL tab first, then choose this again'); return; }
+    const prefs = (state.prefs ||= {});
+    // Where TIDAL is now vs. the video: that's your sync (if both are playing).
+    const v = videoElement(p);
+    let offset = 0;
+    if (t.playing && v && !v.paused) {
+      const tidalNow = t.at + (t.sentAt ? Math.max(0, Date.now() - t.sentAt) / 1000 : 0);
+      offset = Math.round((tidalNow - (Number(p.getCurrentTime?.()) || 0)) * 100) / 100;
+    }
+    prefs.pickedTrack = { id: t.id, title: t.title, artist: t.artist, seconds: t.seconds };
+    prefs.audioOffset = offset;
+    if (prefs.audio === 'youtube') delete prefs.audio;
+    savePrefs();
+    toast(`TIDAL for this video: ${t.artist ? `${t.artist} – ` : ''}${t.title}${offset ? ` (${fmtOffset()})` : ''}`);
+    if (audio.track) audioStop();
+    audio.requested = null;
+    audio.status = 'idle';
+    requestAudio(p);
+  }
+
   const NEAR_S = 10; // TIDAL versions this close are offered at once; up to 20 s after asking
   const mmss = (x) => { const v = Math.round(Number(x) || 0); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; };
 
@@ -836,7 +874,7 @@
 
   function nudgeAudio(delta, quiet = false) {
     const prefs = (state.prefs ||= {});
-    prefs.audioOffset = Math.max(-15, Math.min(15, Math.round(((Number(prefs.audioOffset) || 0) + delta) * 100) / 100));
+    prefs.audioOffset = Math.max(-600, Math.min(600, Math.round(((Number(prefs.audioOffset) || 0) + delta) * 100) / 100));
     savePrefs();
     sendClock();
     if (!quiet) toast(`TIDAL timing: ${fmtOffset()}`);
@@ -1102,6 +1140,7 @@
     }
     if (e.data.__yhdx === 'tidal-audio-status') { onAudioStatus(e.data); return; }
     if (e.data.__yhdx === 'tidal-sync') { onSyncCmd(e.data); return; }
+    if (e.data.__yhdx === 'tidal-pick') { onTidalPick(e.data); return; }
     if (e.data.__yhdx === 'prefs') {
       if (e.data.videoId === state.videoId && !state.prefs) state.prefs = e.data.prefs || {};
       return;

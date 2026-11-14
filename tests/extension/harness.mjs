@@ -286,6 +286,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       sendMessage: async (id, m) => {
         sentToTabs.push([id, m]);
         if (tabs.deaf.includes(id)) throw new Error('Could not establish connection. Receiving end does not exist.');
+        if (tabs.answer[id]) return tabs.answer[id](m);
       },
       reload: async (id) => { tabs.reloaded.push(id); },
       onRemoved: { addListener: (fn) => tabs.removed.push(fn) },
@@ -333,7 +334,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     },
   };
   const offscreen = { open: false, created: [] };
-  const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [], windows: [], windowsClosed: [] };
+  const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [], windows: [], windowsClosed: [], answer: {} };
   const windowsFocused = [];
   const dbg = { log: [], answer: 'row', refuse: false };
   let identity = async () => { throw new Error('no sign-in in this test'); };

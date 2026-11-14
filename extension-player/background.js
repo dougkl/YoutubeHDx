@@ -458,6 +458,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
       return false;
+    case 'tidal-pick':
+      // "Use the song in my TIDAL tab for this video": which song is in your TIDAL tab's player bar, and where.
+      if (sender.tab?.id == null) return false;
+      (async () => {
+        let id = await webTab();
+        if (id == null) id = (await chrome.tabs.query({ url: ['https://tidal.com/*', 'https://listen.tidal.com/*'] }).catch(() => []))[0]?.id ?? null;
+        const now = id == null ? null : await chrome.tabs.sendMessage(id, { target: 'tidal-web', cmd: 'which' }).catch(() => null);
+        if (now?.id) {
+          await sessionSet({ tidalWebTab: id });
+          trackTitles.set(String(now.id), String(msg.title || ''));
+          tidalLog({ video: String(msg.title || ''), step: 'match', outcome: 'you chose the song in your TIDAL tab', track: `${now.artist} – ${now.title} [${now.id}]` });
+        }
+        sendResponse(now?.id ? now : null);
+      })();
+      return true;
     case 'tidal-sync-open':
       // The ⇄ menu / the "♪ TIDAL" label: the small Sync window for this video.
       if (sender.tab?.id != null) openSyncWindow(sender.tab.id);
