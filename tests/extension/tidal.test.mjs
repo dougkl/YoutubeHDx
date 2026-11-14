@@ -29,6 +29,23 @@ describe('same recording on TIDAL', () => {
     assert.equal(same('Def Leppard - Hysteria', track('1', 'Hysteria', 'Long Version', 1, ['Def Leppard'])), false);
   });
 
+  test('a radio edit / single version is the video\'s cut of the song (the length decides); other versions still aren\'t', () => {
+    const same = (title, t) => T.yhdxTidalSameSong(T.yhdxSongParse(title), t);
+    assert.equal(same('CAKE - I Will Survive (Official HD Video)', track('1', 'I Will Survive', 'Radio Edit', 1, ['CAKE'])), true);
+    assert.equal(same('CAKE - I Will Survive (Official HD Video)', track('1', 'I Will Survive (Single Version)', null, 1, ['CAKE'])), true);
+    assert.equal(same('CAKE - I Will Survive (Official HD Video)', track('1', 'I Will Survive', 'Edit', 1, ['CAKE'])), true);
+    assert.equal(same('Blondie - Maria (Radio Edit)', track('1', 'Maria', null, 1, ['Blondie'])), true);
+    assert.equal(same('CAKE - I Will Survive', track('1', 'I Will Survive', 'Spanish Version', 1, ['CAKE'])), false);
+    assert.equal(same('CAKE - I Will Survive', track('1', 'I Will Survive', 'Clean Radio Edit', 1, ['CAKE'])), false);
+    assert.equal(same('CAKE - I Will Survive', track('1', 'I Will Survive', 'Remix Edit', 1, ['CAKE'])), false);
+    assert.equal(same('CAKE - I Will Survive', track('1', 'I Will Survive', 'Extended Version', 1, ['CAKE'])), false);
+    assert.equal(same('CAKE - I Will Survive (Live)', track('1', 'I Will Survive', 'Radio Edit', 1, ['CAKE'])), false);
+    // and the length still picks: the album's 5:10 is not the 4:07 video, its radio edit is
+    const v = T.yhdxSongParse('CAKE - I Will Survive (Official HD Video)');
+    const pick = T.yhdxTidalPick(v, 246.9, [track('a', 'I Will Survive', null, 310, ['CAKE']), track('b', 'I Will Survive', 'Radio Edit', 247, ['CAKE'])]);
+    assert.equal(pick.id, 'b');
+  });
+
   test('several TIDAL artists, feat. guests, reversed names, channel as artist', () => {
     const same = (title, t, author) => T.yhdxTidalSameSong(T.yhdxSongParse(title, author), t);
     assert.equal(same('AronChupa & Little Sis Nora - Hole in the Roof (Official Music Video)', track('1', 'Hole in the Roof', null, 1, ['AronChupa', 'Little Sis Nora'])), true);

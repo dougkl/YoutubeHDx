@@ -365,6 +365,19 @@ describe('service worker: TIDAL', () => {
     assert.equal(calls.length, n);
   });
 
+  test('a "not on TIDAL" answer from before the matching rules changed is asked again; a current one is kept', async () => {
+    const calls = [];
+    const bg = loadPlayerBackground({ fetchFn: fetchFn(calls) });
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3 };
+    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, result: { track: null, reason: 'no same-length recording on TIDAL' } };
+    assert.equal((await bg.send(video)).track.id, '9');
+    assert.ok(calls.length > 0);
+    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 7 * 24 * 3600e3, rules: 2, result: { track: null, reason: 'song not found on TIDAL' } };
+    const n = calls.length;
+    assert.equal((await bg.send(video)).track, null);
+    assert.equal(calls.length, n);
+  });
+
   test('audio commands: opens the offscreen player once and forwards to it, for one tab at a time', async () => {
     const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
     await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 3 }, { tab: { id: 5 } });

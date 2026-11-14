@@ -1,8 +1,9 @@
 // TIDAL audio for music videos: find the same recording at the same length on TIDAL, and keep TIDAL's audio in
 // step with the YouTube video. Pure functions (no chrome.* here) so they can be tested; background.js does the
 // sign-in, caching and messaging, offscreen.js plays the audio.
-// The "same song" rules are the downloader's (SongKey.cs): a live, remix, mix, cover, edit, cut... is never the
-// plain song, two live versions must be the same show, and the lengths must agree.
+// The "same song" rules are the downloader's (SongKey.cs): a live, remix, mix, cover... is never the plain song, two
+// live versions must be the same show, and the lengths must agree. One exception for TIDAL: a radio edit / single
+// version is the same recording cut shorter, and counts when its length matches the video's.
 
 const YHDX_TIDAL_API = 'https://openapi.tidal.com/v2';
 const YHDX_TIDAL_TOLERANCE_S = 2;     // TIDAL track length must be within this of the video's
@@ -107,12 +108,30 @@ function yhdxSameRecording(a, b) {
   return true;
 }
 
+// A music video is often the radio edit / single version of the song. Those words alone don't make another
+// recording, only a shorter cut of it; the length check (within 2 s) tells which cut. Live, remix, extended, a
+// language ("Spanish Version") or "clean" still never count.
+const YHDX_CUT_MARKERS = new Set(['radio', 'edit', 'cut', 'short', 'version']);
+const YHDX_CUT_DETAILS = new Set(['single', 'video', 'album']);
+function yhdxOnlyCut(s) {
+  const k = Object.keys(s.markers);
+  return k.length > 0 && k.every((m) => YHDX_CUT_MARKERS.has(m)) && [...yhdxDetails(s)].every((w) => YHDX_CUT_DETAILS.has(w));
+}
+const yhdxUncut = (s) => ({ ...s, markers: {} });
+
 /** Does this TIDAL track ({title, version, artists}) name the same recording as the video? */
 function yhdxTidalSameSong(video, track) {
   const artists = track.artists || [];
   const names = [...new Set([...artists, ...(artists.length > 1 ? [artists.join(' & '), artists.join(', ')] : [])])];
   const full = track.version ? `${track.title} (${track.version})` : track.title;
-  return names.some((artist) => yhdxSameRecording(video, { ...yhdxSongParse(`${artist} - ${full}`), kind: video.kind }));
+  const plain = (s) => !Object.keys(s.markers).length;
+  return names.some((artist) => {
+    const t = { ...yhdxSongParse(`${artist} - ${full}`), kind: video.kind };
+    if (yhdxSameRecording(video, t)) return true;
+    if (plain(video) && yhdxOnlyCut(t)) return yhdxSameRecording(video, yhdxUncut(t));
+    if (plain(t) && yhdxOnlyCut(video)) return yhdxSameRecording(yhdxUncut(video), t);
+    return false;
+  });
 }
 
 /** The same recording at the same length (best: closest length, then Hi-Res) or null. */

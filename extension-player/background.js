@@ -50,6 +50,7 @@ const TIDAL_TOKEN_URL = 'https://auth.tidal.com/v1/oauth2/token';
 const TIDAL_SCOPES = 'search.read playback user.read';
 // A song that TIDAL only plays as a preview is looked at again after 3 days (access can change per song).
 const TIDAL_MATCH_TTL = { found: 30 * DAY, notFound: 7 * DAY, preview: 3 * DAY };
+const TIDAL_MATCH_RULES = 2; // 2: radio edits / single versions count when the length matches
 let tidalAudioTab = null; // the tab whose video TIDAL is playing for
 // Chrome stops this service worker when it's idle (e.g. a long pause), which would forget the tab: keep it in session storage.
 const audioTabStore = chrome.storage.session;
@@ -155,7 +156,9 @@ async function tidalMatchInner(msg) {
   const exclude = (Array.isArray(msg.exclude) ? msg.exclude : []).map(String).slice(0, 20);
   const key = `tidal:${msg.videoId}`;
   const hit = (await chrome.storage.local.get(key))[key];
-  if (hit && Date.now() - hit.at < hit.ttl && !exclude.length) {
+  // Answers "not on TIDAL" from before the matching rules last changed are asked again.
+  const stale = hit && !hit.result?.track && !hit.result?.preview && (hit.rules ?? 1) < TIDAL_MATCH_RULES;
+  if (hit && !stale && Date.now() - hit.at < hit.ttl && !exclude.length) {
     const r = { ...hit.result, remembered: true };
     // remembered from before 1.10 as "preview only": your TIDAL tab plays it in full now
     if (!r.track && r.preview && r.previewTrack) Object.assign(r, { track: r.previewTrack, via: 'web' });
@@ -169,7 +172,7 @@ async function tidalMatchInner(msg) {
   // TIDAL gives this app only a preview, but your own TIDAL web player plays the full song: use that.
   if (result.preview && result.previewTrack) Object.assign(result, { track: result.previewTrack, via: 'web' });
   const ttl = result.track ? TIDAL_MATCH_TTL.found : result.preview ? TIDAL_MATCH_TTL.preview : TIDAL_MATCH_TTL.notFound;
-  if (!exclude.length) await chrome.storage.local.set({ [key]: { at: Date.now(), ttl, result } });
+  if (!exclude.length) await chrome.storage.local.set({ [key]: { at: Date.now(), ttl, result, rules: TIDAL_MATCH_RULES } });
   return result;
 }
 
