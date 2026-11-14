@@ -78,6 +78,19 @@
   // You picked other songs in the TIDAL tab this many times: the Player then leaves TIDAL to you.
   const MAX_CHANGES = 2;
 
+  // What this tab looks like right now, for the TIDAL log when TIDAL won't start: is the tab on screen, what TIDAL's
+  // player bar shows, what its media elements are doing, and any message TIDAL shows on the page.
+  function snapshot() {
+    const bar = footer();
+    const btn = !bar ? 'no player bar' : q('[data-test="play"]', bar) ? 'Play' : q('[data-test="pause"]', bar) ? 'Pause' : 'no button';
+    const media = [...document.querySelectorAll('video, audio')].map((m) => `${m.id || m.tagName.toLowerCase()} ${m.paused ? 'paused' : 'playing'}` +
+      ` ready${m.readyState} net${m.networkState}${m.error ? ` error${m.error.code}` : ''} vol${m.volume.toFixed(2)}${m.muted ? ' muted' : ''} at${m.currentTime.toFixed(1)}`).join(', ');
+    const said = [...document.querySelectorAll('[role="alert"], [role="alertdialog"], [role="dialog"], [data-test*="notification"], [data-test*="toast"], [data-test*="modal"], [data-test*="snackbar"]')]
+      .map((e) => (e.innerText || '').trim().replace(/\s+/g, ' ')).filter(Boolean).join(' / ').slice(0, 240);
+    return `tab ${document.visibilityState}${document.hasFocus() ? ' focused' : ''}, clicked-in ${!!navigator.userActivation?.hasBeenActive}; ` +
+      `bar: ${btn}, song ${tidalTrack() ?? '?'}; media: ${media || 'none'}${said ? `; TIDAL says: ${said}` : ''}`;
+  }
+
   function report(status, extra = {}) {
     if (!current || !alive()) return;
     try {
@@ -142,7 +155,7 @@
     } else {
       // Chrome only lets a page play sound after a click in it (the Player tries that click itself).
       mine.waitingClick = true;
-      report('need-click');
+      report('need-click', { detail: snapshot() });
     }
     start();
   }
@@ -254,6 +267,7 @@
         offset: Number(msg.offset) || 0, sentAt: Number(msg.sentAt) || Date.now() };
       tick(); // a hidden tab's timers can be slow: every clock is also a tick
     } else if (msg.cmd === 'stop') stop();
+    else if (msg.cmd === 'diag' && current) report('diag', { detail: snapshot() });
     return false;
   });
 

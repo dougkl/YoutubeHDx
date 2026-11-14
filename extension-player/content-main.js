@@ -436,7 +436,7 @@
     audio.status = 'loading';
     const offset = Number(state.prefs?.audioOffset) || 0;
     audio.via = data.via === 'web' ? 'web' : null;
-    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id, via: audio.via,
+    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id, via: audio.via, title: p.getVideoData?.()?.title || '',
                          at: Math.max(0, (Number(p.getCurrentTime?.()) || 0) + offset) }, location.origin);
     startAudioClock();
   }

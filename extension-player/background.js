@@ -139,7 +139,7 @@ function logMatch(msg, result, remembered) {
 }
 
 function logPlayer(msg) {
-  if (!['playing', 'preview', 'error', 'revoked', 'need-click', 'changed'].includes(msg.status)) return;
+  if (!['playing', 'preview', 'error', 'revoked', 'need-click', 'changed', 'diag'].includes(msg.status)) return;
   tidalLog({ video: trackTitles.get(String(msg.trackId)) || '', step: 'player', outcome: String(msg.status),
     track: msg.trackId ? `[${msg.trackId}]` : '', detail: [msg.quality, msg.message].filter(Boolean).join(' ') });
 }
@@ -274,6 +274,7 @@ async function tidalWebAudio(msg, tabId) {
   if (msg.cmd === 'load') {
     const { id, fresh } = await ensureWebTab(msg.trackId, tabId);
     webLoad = { ...msg, target: 'tidal-web' };
+    if (msg.title) trackTitles.set(String(msg.trackId), String(msg.title));
     // A new tab gets it with its "hello". A TIDAL tab open since before the Player was updated has no live copy of the
     // Player's script (Chrome doesn't add it to open tabs): reload it, and it says hello.
     const unheard = await chrome.tabs.sendMessage(id, webLoad).then(() => false,
@@ -453,7 +454,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-web-status':
       // From your TIDAL tab: pass to the YouTube tab it plays for.
       audioTab().then(async (tab) => {
-        const m = { type: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null, quality: msg.quality ?? null, via: 'web' };
+        const m = { type: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null, quality: msg.quality ?? null, via: 'web',
+          ...(msg.detail ? { message: String(msg.detail).slice(0, 600) } : {}) };
+        if (m.status === 'diag') { logPlayer(m); return; } // only for the log
         const forward = () => { logPlayer(m); if (tab != null) chrome.tabs.sendMessage(tab, m).catch(() => {}); };
         if (m.status === 'need-click') {
           // Do the click for you first; only if TIDAL still isn't playing a few seconds later, ask you.
@@ -481,7 +484,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             const shown = await peekWebTab(webId, tab, async () => {
               // On screen, a song TIDAL was already starting goes on by itself: give it a moment before pressing Play.
               if (await waitForSound(key, PEEK_SETTLE_MS)) return;
-              if (await pressPlay()) await waitForSound(key, PEEK_MAX_MS);
+              if ((await pressPlay()) && (await waitForSound(key, PEEK_MAX_MS))) return;
+              // Still silent while on screen: note what the TIDAL tab shows, for the log.
+              chrome.tabs.sendMessage(webId, { target: 'tidal-web', cmd: 'diag' }).catch(() => {});
+              await new Promise((r) => setTimeout(r, 300));
             });
             if (shown) tidalLog({ video: title, step: 'player', outcome: 'showed the TIDAL tab for a moment to start it (Chrome starts sound only in a tab on screen)', track: `[${m.trackId}]` });
             else if (!(await pressPlay())) { clearTimeout(autoStart.timer); autoStart.waiting = null; forward(); }

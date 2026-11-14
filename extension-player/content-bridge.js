@@ -103,6 +103,7 @@
     if (req.playing != null) msg.playing = !!req.playing;
     if (req.fullscreen != null) msg.fullscreen = !!req.fullscreen;
     if (req.via === 'web') msg.via = 'web';
+    if (req.cmd === 'load' && req.title) msg.title = String(req.title).slice(0, 200);
     send(msg);
   }
 

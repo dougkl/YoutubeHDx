@@ -690,6 +690,36 @@ describe('service worker: TIDAL', () => {
     }
   });
 
+  test('TIDAL still silent while shown: the log gets what the TIDAL tab shows, and the song\'s title', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+      const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
+      bg.tabs.open.push({ id: 5, url: 'https://www.youtube.com/watch?v=x', windowId: 1, active: true });
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web', title: 'Ramones - Pet Sematary' }, { tab: { id: 5 } });
+      await flush();
+      const web = bg.tabs.created[0].id;
+      bg.tabs.created[0].windowId = 1;
+      bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1', detail: 'tab hidden, bar: Pause' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      await flush();
+      mock.timers.tick(1000);
+      await flush();
+      mock.timers.tick(4000);
+      await flush();
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === web && m.cmd === 'diag').length, 1);
+      await bg.send({ type: 'tidal-web-status', status: 'diag', trackId: '1', detail: 'tab visible focused, bar: Play; TIDAL says: Playing on another device' }, { tab: { id: web } });
+      mock.timers.tick(5000); // then the video says TIDAL didn't start
+      await flush();
+      const log = bg.local.tidalLog;
+      assert.ok(log.some((e) => e.outcome === 'diag' && /another device/.test(e.detail) && e.video === 'Ramones - Pet Sematary'));
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'diag').length, 0, 'not sent to the video');
+      const ask = log.find((e) => e.outcome === 'need-click');
+      assert.match(ask.detail, /tab hidden, bar: Pause/);
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
   test('a new TIDAL tab while the video is full screen: shown for a moment, then the video goes back to full screen', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
