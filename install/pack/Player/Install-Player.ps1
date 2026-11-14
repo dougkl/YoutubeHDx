@@ -57,8 +57,8 @@ if ($entries.Values -contains $tidalPattern) {
     $next = 1 + (@($entries.Keys) + 0 | Measure-Object -Maximum).Maximum
     $added = $false
     try {
-        if (-not (Test-Path $AutoplayPolicyKey)) { New-Item -Path $AutoplayPolicyKey -Force | Out-Null }
-        New-ItemProperty -Path $AutoplayPolicyKey -Name "$next" -Value $tidalPattern -PropertyType String -Force | Out-Null
+        if (-not (Test-Path $AutoplayPolicyKey)) { New-Item -Path $AutoplayPolicyKey -Force -ErrorAction Stop | Out-Null }
+        New-ItemProperty -Path $AutoplayPolicyKey -Name "$next" -Value $tidalPattern -PropertyType String -Force -ErrorAction Stop | Out-Null
         $added = $true
     } catch {
         # Windows keeps the Policies key for administrators: ask once (UAC) and write the same value as admin.
