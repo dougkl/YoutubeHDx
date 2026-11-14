@@ -98,6 +98,7 @@
     if (req.trackId != null) msg.trackId = String(req.trackId).replace(/\D/g, '').slice(0, 15);
     for (const k of ['at', 'videoTime', 'rate', 'offset', 'volume', 'sentAt']) if (req[k] != null) msg[k] = Number(req[k]) || 0;
     if (req.playing != null) msg.playing = !!req.playing;
+    if (req.fullscreen != null) msg.fullscreen = !!req.fullscreen;
     if (req.via === 'web') msg.via = 'web';
     send(msg);
   }

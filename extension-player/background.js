@@ -222,6 +222,7 @@ async function ensureWebTab(trackId) {
 // goes on to other songs by itself), and a new one is shown for a moment — then the video's tab is back in front.
 const PEEK_MS = 1200;
 const webPlayed = new Set(); // TIDAL tabs that have played since their page loaded
+const ytFullscreen = new Map(); // video tab -> full screen (from its clock)
 let peeking = null;
 
 async function peekWebTab(webId, ytId) {
@@ -229,14 +230,21 @@ async function peekWebTab(webId, ytId) {
   const web = await chrome.tabs.get(webId).catch(() => null);
   if (!web || web.active) return false;
   const win = await chrome.windows?.get(web.windowId).catch(() => null);
-  if (win && (win.state === 'fullscreen' || win.state === 'minimized')) return false; // a full-screen video stays so
+  if (win?.state === 'minimized') return false;
   const yt = ytId != null ? await chrome.tabs.get(ytId).catch(() => null) : null;
-  const back = yt?.windowId === web.windowId ? yt.id
-    : (await chrome.tabs.query({ active: true, windowId: web.windowId }).catch(() => []))[0]?.id;
+  const sameWindow = yt?.windowId === web.windowId;
+  const back = sameWindow ? yt.id : (await chrome.tabs.query({ active: true, windowId: web.windowId }).catch(() => []))[0]?.id;
+  // Switching tabs takes a full-screen video out of full screen: put it back right after (YouTube's own button).
+  const refullscreen = sameWindow && yt.active && ytFullscreen.get(yt.id) === true;
   peeking = (async () => {
     await chrome.tabs.update(webId, { active: true }).catch(() => {});
     await new Promise((r) => setTimeout(r, PEEK_MS));
     if (back != null) await chrome.tabs.update(back, { active: true }).catch(() => {});
+    if (refullscreen) {
+      await new Promise((r) => setTimeout(r, 300));
+      await evalAsUser(yt.id, `(() => { if (document.fullscreenElement) return 'already';
+        const b = document.querySelector('#movie_player .ytp-fullscreen-button'); if (!b) return 'none'; b.click(); return 'pressed'; })()`);
+    }
   })();
   await peeking;
   peeking = null;
@@ -272,34 +280,41 @@ const AUTO_START_WAIT_MS = 5000;
 const PEEK_AFTER_MS = 1000; // after the automatic Play, TIDAL normally sounds within this; if not, show its tab
 const autoStart = { tried: new Set(), timer: null, waiting: null };
 
-async function autoStartWebTab(tabId, trackId) {
-  if (!chrome.debugger || !/^\d{1,15}$/.test(String(trackId))) return false;
+// Runs a script in a tab as if you had clicked (Chrome's debugger, attached for a moment). Returns its value or null.
+async function evalAsUser(tabId, expression) {
+  if (!chrome.debugger) return null;
   const target = { tabId };
   try {
     await chrome.debugger.attach(target, '1.3');
   } catch {
-    return false;
+    return null;
   }
   try {
-    // The song is usually already in TIDAL's player bar, paused (its first start was blocked): press the bar's Play.
-    // Pressing the song's row again doesn't start an already-loaded song.
-    const expression = `(() => {
-      const bar = document.querySelector('[data-test="footer-player"]');
-      const link = bar && bar.querySelector('[data-test="footer-track-title"] a[href*="/track/"]');
-      const play = bar && bar.querySelector('[data-test="play"]');
-      if (play && link && /\\/track\\/${trackId}(\\D|$)/.test(link.getAttribute('href') || '')) { play.click(); return 'footer'; }
-      const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
-      const b = row && (row.querySelector('[data-test="play-button"]') || row);
-      if (b) { b.click(); return 'row'; }
-      return 'none';
-    })()`;
     const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, userGesture: true, returnByValue: true });
-    return r?.result?.value === 'row' || r?.result?.value === 'footer';
+    return r?.result?.value ?? null;
   } catch {
-    return false;
+    return null;
   } finally {
     setTimeout(() => chrome.debugger.detach(target).catch(() => {}), 500);
   }
+}
+
+async function autoStartWebTab(tabId, trackId) {
+  if (!/^\d{1,15}$/.test(String(trackId))) return false;
+  // The song is usually already in TIDAL's player bar, paused (its first start was blocked): press the bar's Play.
+  // Pressing the song's row again doesn't start an already-loaded song.
+  const expression = `(() => {
+    const bar = document.querySelector('[data-test="footer-player"]');
+    const link = bar && bar.querySelector('[data-test="footer-track-title"] a[href*="/track/"]');
+    const play = bar && bar.querySelector('[data-test="play"]');
+    if (play && link && /\\/track\\/${trackId}(\\D|$)/.test(link.getAttribute('href') || '')) { play.click(); return 'footer'; }
+    const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
+    const b = row && (row.querySelector('[data-test="play-button"]') || row);
+    if (b) { b.click(); return 'row'; }
+    return 'none';
+  })()`;
+  const v = await evalAsUser(tabId, expression);
+  return v === 'row' || v === 'footer';
 }
 
 async function onWebHello(tabId) {
@@ -309,6 +324,7 @@ async function onWebHello(tabId) {
 }
 
 async function tidalAudio(msg, tabId) {
+  if (msg.cmd === 'clock') ytFullscreen.set(tabId, msg.fullscreen === true);
   if (msg.cmd === 'load') await sessionSet({ tidalAudioVia: msg.via === 'web' ? 'web' : 'sdk' });
   if ((await sessionGet('tidalAudioVia')) === 'web') {
     if (msg.cmd === 'load') {

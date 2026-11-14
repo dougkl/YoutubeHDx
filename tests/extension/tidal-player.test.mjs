@@ -568,21 +568,32 @@ describe('service worker: TIDAL', () => {
     }
   });
 
-  test('a new TIDAL tab while the video is full screen: not shown (the video stays full screen)', async () => {
+  test('a new TIDAL tab while the video is full screen: shown for a moment, then the video goes back to full screen', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
       const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
       bg.tabs.windowState = 'fullscreen';
+      bg.tabs.open.push({ id: 5, url: 'https://www.youtube.com/watch?v=x', windowId: 1, active: true });
       await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web' }, { tab: { id: 5 } });
       await flush();
+      await bg.send({ type: 'tidal-audio', cmd: 'clock', trackId: '1', videoTime: 3, playing: true, fullscreen: true }, { tab: { id: 5 } });
+      await flush();
       const web = bg.tabs.created[0].id;
+      bg.tabs.created[0].windowId = 1;
       await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
       await flush();
-      mock.timers.tick(6000);
+      mock.timers.tick(1000);
       await flush();
-      assert.deepEqual(bg.tabs.updated, []);
-      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 1, 'then it asks');
+      mock.timers.tick(1200);
+      await flush();
+      mock.timers.tick(300);
+      await flush();
+      assert.equal(JSON.stringify(bg.tabs.updated), JSON.stringify([[web, { active: true }], [5, { active: true }]]));
+      const onVideo = bg.dbg.log.filter(([m, id]) => m === 'Runtime.evaluate' && id === 5);
+      assert.equal(onVideo.length, 1);
+      assert.match(onVideo[0][2].expression, /ytp-fullscreen-button/);
+      assert.equal(onVideo[0][2].userGesture, true);
     } finally {
       mock.timers.reset();
     }
@@ -683,7 +694,7 @@ describe('service worker: TIDAL', () => {
     await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web' }, { tab: { id: 5 } });
     await new Promise((r) => setTimeout(r, 30));
     const web = bg.tabs.created[0].id;
-    bg.tabs.windowState = 'fullscreen'; // (no showing either)
+    bg.tabs.windowState = 'minimized'; // (no showing either)
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '9' }, { tab: { id: web }, url: 'https://tidal.com/track/9' });

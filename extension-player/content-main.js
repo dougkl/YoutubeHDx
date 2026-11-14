@@ -526,7 +526,7 @@
     const volume = p.isMuted?.() ? 0 : (Number(p.getVolume?.() ?? 100) / 100);
     window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: Number(p.getCurrentTime?.()) || 0,
                          playing, rate: Number(v?.playbackRate) || 1, offset: Number(state.prefs?.audioOffset) || 0,
-                         volume, sentAt: Date.now() }, location.origin);
+                         volume, fullscreen: !!document.fullscreenElement, sentAt: Date.now() }, location.origin);
   }
 
   function startAudioClock() {
