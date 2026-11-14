@@ -195,7 +195,8 @@
   background: rgba(0,0,0,.55); color: #fff; font: 500 13px Roboto, Arial, sans-serif; pointer-events: none;
   opacity: 0; transition: opacity 1.2s ease, bottom .25s ease, padding .6s ease, font-size .6s ease; white-space: nowrap; }
 .yhdx-hq.yhdx-show { opacity: .85; }
-.yhdx-hq.yhdx-mini { opacity: .5; padding: 3px 9px; font-size: 11px; }
+.yhdx-hq.yhdx-mini { opacity: .28; padding: 3px 9px; font-size: 11px; }
+.yhdx-hq.yhdx-mini.yhdx-toggle:hover { opacity: .9; }
 .yhdx-hq.yhdx-note.yhdx-show { opacity: .65; }
 .yhdx-hq.yhdx-click { pointer-events: auto; cursor: pointer; opacity: .9; }
 .yhdx-hq.yhdx-click:hover { opacity: 1; background: rgba(0,0,0,.75); }
@@ -543,13 +544,74 @@
     const v = videoElement(p);
     const ad = isAd(p);
     // Ads keep their own sound; the music video's is muted again when it comes back.
-    if (audio.status === 'on' && !audio.fade) muteYoutube(!ad);
+    if (audio.status === 'on' && !audio.fade) {
+      if (audio.listenBoth && !ad) hearBoth(v, true);
+      else { hearBoth(v, false); muteYoutube(!ad); }
+    }
     const playing = Boolean(v && !v.paused && !v.seeking && !ad && (v.readyState ?? 4) >= 3);
     const volume = p.isMuted?.() ? 0 : (Number(p.getVolume?.() ?? 100) / 100);
     window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: Number(p.getCurrentTime?.()) || 0,
                          playing, rate: Number(v?.playbackRate) || 1, offset: Number(state.prefs?.audioOffset) || 0,
-                         volume, fullscreen: !!document.fullscreenElement, sentAt: Date.now() }, location.origin);
+                         volume, fullscreen: !!document.fullscreenElement, both: !!audio.listenBoth, sentAt: Date.now() }, location.origin);
   }
+
+  // ---------------------------------------------------------------- the small Sync window
+  // "Hear both": YouTube's sound and TIDAL's together, a bit quieter, so you hear an echo until they're in step.
+  const BOTH_LEVEL = 0.6;
+  function hearBoth(v, on) {
+    if (!v) return;
+    if (on) {
+      if (audio.bothBase == null) audio.bothBase = v.volume;
+      if (v.muted && audio.mutedByUs) { v.muted = false; audio.mutedByUs = false; }
+      const want = audio.bothBase * BOTH_LEVEL;
+      if (Math.abs(v.volume - want) > 0.005) v.volume = want;
+    } else if (audio.bothBase != null) {
+      v.volume = audio.bothBase;
+      audio.bothBase = null;
+    }
+  }
+
+  function openSync() {
+    if (!audio.track) return;
+    if (!audio.syncing) audio.syncFrom = Number(state.prefs?.audioOffset) || 0;
+    audio.syncing = true;
+    audio.listenBoth = true;
+    sendClock();
+    window.postMessage({ __yhdx: 'tidal-sync-open' }, location.origin);
+    sendSyncState();
+  }
+
+  function sendSyncState(closed = false) {
+    window.postMessage({ __yhdx: 'tidal-sync-state', title: getPlayer()?.getVideoData?.()?.title || '', offset: Number(state.prefs?.audioOffset) || 0,
+                         both: !!audio.listenBoth, status: audio.status, closed }, location.origin);
+  }
+
+  function endSync(closeWindow) {
+    if (!audio.syncing) return;
+    audio.syncing = false;
+    audio.listenBoth = false;
+    sendClock();
+    if (closeWindow) sendSyncState(true);
+  }
+
+  function onSyncCmd(d) {
+    if (!audio.syncing && d.cmd !== 'hello') return;
+    switch (d.cmd) {
+      case 'hello': sendSyncState(!audio.syncing); break;
+      case 'nudge': nudgeAudio(Math.max(-5, Math.min(5, Number(d.delta) || 0)), true); sendSyncState(); break;
+      case 'both': audio.listenBoth = !!d.on; sendClock(); sendSyncState(); break;
+      case 'done': endSync(false); toast(`TIDAL timing kept: ${fmtOffset()}`); break;
+      case 'cancel':
+        (state.prefs ||= {}).audioOffset = audio.syncFrom ?? 0;
+        savePrefs();
+        endSync(false);
+        break;
+      case 'youtube': endSync(false); useYoutubeAudio(); break;
+      default: break;
+    }
+  }
+
+  const fmtOffset = () => { const o = Number(state.prefs?.audioOffset) || 0; return `${o > 0 ? '+' : ''}${o.toFixed(2)} s`; };
 
   function startAudioClock() {
     clearInterval(audio.timer);
@@ -581,7 +643,7 @@
   // or its sound comes through for a moment.
   function onVolumeChange() {
     const v = audio.video;
-    if (!v || v.muted || audio.status !== 'on' || audio.fade || isAd(getPlayer())) return;
+    if (!v || v.muted || audio.status !== 'on' || audio.fade || audio.listenBoth || isAd(getPlayer())) return;
     v.muted = true;
     audio.mutedByUs = true;
   }
@@ -596,6 +658,7 @@
 
   /** Back to YouTube's sound (and tell the TIDAL player to stop). */
   function audioStop(tellPlayer = true) {
+    endSync(true);
     clearInterval(audio.timer);
     audio.timer = null;
     detachVideoListeners();
@@ -618,8 +681,8 @@
     const el = document.createElement('div');
     el.className = 'yhdx-hq yhdx-toggle';
     el.setAttribute('role', 'button');
-    el.title = "Click: YouTube's sound for this video (remembered)";
-    el.addEventListener('click', (e) => { e.stopPropagation(); useYoutubeAudio(); showYoutubeChoice(); });
+    el.title = 'Click: sync TIDAL (or switch to YouTube\'s sound) in a small window';
+    el.addEventListener('click', (e) => { e.stopPropagation(); openSync(); });
     const q = audio.quality === 'HI_RES_LOSSLESS' ? 'Hi-Res' : audio.quality === 'LOSSLESS' ? 'Lossless' : '';
     el.textContent = `♪ High-quality audio found · TIDAL${q ? ` ${q}` : ''}`;
     p.appendChild(el);
@@ -723,6 +786,7 @@
   function audioMenuItems() {
     const items = [];
     if (audio.status === 'on' || audio.status === 'gap') {
+      items.push(['Sync TIDAL in a small window (arrow keys; drag it to another screen)', openSync]);
       if (audio.chosen) items.push(["TIDAL sound is late: play it 1 s earlier", () => nudgeAudio(+1)]);
       items.push(["TIDAL sound is late: play it 0.1 s earlier", () => nudgeAudio(+0.1)]);
       items.push(["TIDAL sound is early: play it 0.1 s later", () => nudgeAudio(-0.1)]);
@@ -768,12 +832,12 @@
     requestAudio(getPlayer());
   }
 
-  function nudgeAudio(delta) {
+  function nudgeAudio(delta, quiet = false) {
     const prefs = (state.prefs ||= {});
-    prefs.audioOffset = Math.round(((Number(prefs.audioOffset) || 0) + delta) * 100) / 100;
+    prefs.audioOffset = Math.max(-15, Math.min(15, Math.round(((Number(prefs.audioOffset) || 0) + delta) * 100) / 100));
     savePrefs();
     sendClock();
-    toast(`TIDAL timing: ${prefs.audioOffset > 0 ? '+' : ''}${prefs.audioOffset.toFixed(2)} s`);
+    if (!quiet) toast(`TIDAL timing: ${fmtOffset()}`);
   }
 
   function rejectTrack() {
@@ -1035,6 +1099,7 @@
       return;
     }
     if (e.data.__yhdx === 'tidal-audio-status') { onAudioStatus(e.data); return; }
+    if (e.data.__yhdx === 'tidal-sync') { onSyncCmd(e.data); return; }
     if (e.data.__yhdx === 'prefs') {
       if (e.data.videoId === state.videoId && !state.prefs) state.prefs = e.data.prefs || {};
       return;

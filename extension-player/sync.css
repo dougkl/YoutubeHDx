@@ -1,0 +1,18 @@
+:root { --bg: #12151f; --panel: #1b2030; --text: #e9ebf2; --muted: #8a91a6; --accent: #ff4d4d; --line: #2a3045; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.4 "Segoe UI", Roboto, Arial, sans-serif; }
+main { padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.song { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shift { display: flex; align-items: baseline; gap: 10px; }
+#offset { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.hint { color: var(--muted); font-size: 12px; }
+.steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.legend { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; margin-top: -6px; }
+button { padding: 8px 6px; border: 1px solid var(--line); border-radius: 7px; font: inherit; color: var(--text); background: var(--panel); cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.link { background: none; border: 0; color: var(--muted); text-decoration: underline; padding: 8px 2px; }
+.both { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+footer { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+kbd { font: 10px ui-monospace, Consolas, monospace; opacity: .7; margin-left: 4px; }
+body.off main { opacity: .5; }

@@ -10,6 +10,7 @@
   // Crossfade with the video (which fades out / back in at the same time): no gap when the sound switches.
   const FADE_IN_MS = 1500;
   const FADE_OUT_MS = 700;
+  const BOTH_LEVEL = 0.6; // TIDAL's level while you hear both (Sync window)
   let fading = null;
 
   // TIDAL remembers its volume from the media element, so while the Player fades it, your real volume is kept here:
@@ -253,6 +254,14 @@
       fadeMedia(m, 0, c.vol, FADE_IN_MS, null, c.vol); // the video fades out at the same time
       report('playing', { quality: quality() });
     }
+    // "Hear both" (the Sync window): TIDAL a bit quieter alongside the video's sound; back to your volume after.
+    // (Only when it switches: your own volume changes in TIDAL stay yours.)
+    if (!fading && c.vol != null && k.both !== !!c.both) {
+      c.both = k.both;
+      if (k.both) keepVolume(c.vol);
+      m.volume = c.vol * (k.both ? BOTH_LEVEL : 1);
+      if (!k.both) forgetVolume();
+    }
     if (m.seeking) return;
     const step = yhdxSyncStep(m.currentTime, target, k.rate);
     if (step.seek != null) m.currentTime = step.seek;
@@ -264,7 +273,7 @@
     if (msg.cmd === 'load') load(msg);
     else if (msg.cmd === 'clock' && current && String(msg.trackId) === current.trackId) {
       current.clock = { videoTime: Number(msg.videoTime) || 0, playing: !!msg.playing, rate: Number(msg.rate) || 1,
-        offset: Number(msg.offset) || 0, sentAt: Number(msg.sentAt) || Date.now() };
+        offset: Number(msg.offset) || 0, both: !!msg.both, sentAt: Number(msg.sentAt) || Date.now() };
       tick(); // a hidden tab's timers can be slow: every clock is also a tick
     } else if (msg.cmd === 'stop') stop();
     else if (msg.cmd === 'diag' && current) report('diag', { detail: snapshot() });

@@ -194,6 +194,24 @@ async function ensureOffscreen() {
 
 let tidalReopening = null;
 
+// ---------------------------------------------------------------- the small Sync window
+// A popup window you can drag to another monitor; it opens where you left it last time.
+const SYNC_SIZE = { width: 400, height: 300 };
+
+async function openSyncWindow(tabId) {
+  const old = await sessionGet('syncWindow');
+  if (old != null) await chrome.windows.remove(old).catch(() => {});
+  const { syncWindowBounds: b } = await chrome.storage.local.get({ syncWindowBounds: null });
+  const base = { url: chrome.runtime.getURL(`sync.html?tab=${tabId}`), type: 'popup', focused: true, ...SYNC_SIZE };
+  const placed = b && Number.isFinite(b.left) && Number.isFinite(b.top)
+    ? { ...base, left: Math.round(b.left), top: Math.round(b.top),
+        width: Math.max(320, Math.round(b.width) || SYNC_SIZE.width), height: Math.max(240, Math.round(b.height) || SYNC_SIZE.height) }
+    : base;
+  // A place that's no longer on any screen (a monitor unplugged) is refused: then Chrome's default place.
+  const w = (await chrome.windows.create(placed).catch(() => null)) || (placed !== base ? await chrome.windows.create(base).catch(() => null) : null);
+  if (w) await sessionSet({ syncWindow: w.id });
+}
+
 // ---------------------------------------------------------------- your TIDAL web-player tab (full songs)
 const TIDAL_WEB_URL = 'https://tidal.com';
 let webLoad = null; // the last load sent to the web tab, sent again if that tab reloads
@@ -440,6 +458,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
       return false;
+    case 'tidal-sync-open':
+      // The ⇄ menu / the "♪ TIDAL" label: the small Sync window for this video.
+      if (sender.tab?.id != null) openSyncWindow(sender.tab.id);
+      return false;
+    case 'tidal-sync':
+      // From the Sync window: to the video's tab.
+      if (!isExtensionPage(sender) || !Number.isInteger(msg.tabId)) return false;
+      chrome.tabs.sendMessage(msg.tabId, { type: 'tidal-sync', cmd: String(msg.cmd || ''), delta: Number(msg.delta) || 0, on: !!msg.on })
+        .then(() => sendResponse(true), () => sendResponse(false));
+      return true;
     case 'tidal-focus':
       // "click here" on the video: bring your TIDAL tab to the front so you can press Play there once.
       webTab().then(async (id) => {

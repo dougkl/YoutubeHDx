@@ -117,21 +117,53 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.player.video.muted, true);
   });
 
-  test('the "♪ TIDAL" corner label is the switch: click for YouTube\'s sound, click again for TIDAL', () => {
+  test('the "♪ TIDAL" label opens the small Sync window: hear both, arrows move TIDAL, keep / cancel / YouTube\'s sound', () => {
     const page = playingTidal();
-    const label = page.inPlayer('yhdx-hq')[0];
-    assert.match(label.className, /yhdx-toggle/);
-    label.click();
+    const states = () => page.posted.filter((m) => m.__yhdx === 'tidal-sync-state');
+    page.inPlayer('yhdx-hq')[0].click();
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-sync-open').length, 1);
+    assert.equal(audioMsgs(page, 'clock').at(-1).both, true);
+    assert.equal(page.player.video.muted, false, 'hear both');
+    assert.ok(Math.abs(page.player.video.volume - 0.48) < 0.001);
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'nudge', delta: 0.1 });
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'nudge', delta: 1 });
+    assert.equal(page.savedPrefs.vid1.audioOffset, 1.1);
+    assert.equal(states().at(-1).offset, 1.1);
+    assert.equal(audioMsgs(page, 'clock').at(-1).offset, 1.1);
+    page.player.video.fire('volumechange'); // hearing both is not undone as "YouTube un-muting"
+    assert.equal(page.player.video.muted, false);
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'done' });
+    assert.equal(audioMsgs(page, 'clock').at(-1).both, false);
+    assert.equal(page.player.video.muted, true);
+    assert.equal(page.player.video.volume, 0.8);
+    assert.equal(page.savedPrefs.vid1.audioOffset, 1.1, 'kept');
+    // cancel puts back what you had when it opened
+    page.inPlayer('yhdx-hq')[0].click();
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'nudge', delta: -1 });
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'cancel' });
+    assert.equal(page.savedPrefs.vid1.audioOffset, 1.1);
+    // YouTube's sound from the window
+    page.inPlayer('yhdx-hq')[0].click();
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'youtube' });
     assert.equal(page.savedPrefs.vid1.audio, 'youtube');
     assert.equal(audioMsgs(page, 'stop').length, 1);
     advance(800);
     assert.equal(page.player.video.muted, false);
-    const back = page.inPlayer('yhdx-hq')[0];
-    assert.match(back.textContent, /YouTube's sound · click for TIDAL/);
-    back.click();
-    assert.equal(page.savedPrefs.vid1.audio, undefined);
-    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
-    advance(8000);
+  });
+
+  test('the Sync window closes when the video changes', () => {
+    const page = playingTidal();
+    page.inPlayer('yhdx-hq')[0].click();
+    page.player.videoId = 'vid2';
+    page.fireWindow('yt-navigate-finish');
+    advance(600);
+    assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-sync-state').at(-1).closed, true);
+  });
+
+  test('commands from a Sync window that is not open for this video are ignored', () => {
+    const page = playingTidal();
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'nudge', delta: 1 });
+    assert.equal(page.savedPrefs.vid1?.audioOffset ?? 0, 0);
   });
 
   test('⇄ menu: timing nudges, another recording, and YouTube sound for this video (remembered)', () => {
@@ -139,6 +171,7 @@ describe('TIDAL audio for music videos', () => {
     page.syncButton().click();
     assert.ok(page.menu().children.some((c) => c.textContent.startsWith('Audio: TIDAL · Peter Schilling – Major Tom')));
     assert.deepEqual(page.menuItems().filter((x) => /TIDAL|YouTube's sound/.test(x)), [
+      'Sync TIDAL in a small window (arrow keys; drag it to another screen)',
       'TIDAL sound is late: play it 0.1 s earlier',
       'TIDAL sound is early: play it 0.1 s later',
       'Not the same recording: try another TIDAL track',
@@ -433,6 +466,20 @@ describe('bridge: TIDAL messages', () => {
     assert.equal(after.filter((m) => m.__yhdx === 'stale').length, 1);
   });
 
+  test('Sync window messages: commands into the page, the page\'s state out, "hear both" in the clock', async () => {
+    const out = [];
+    const posted = await runBridge({}, { onSend: (msg) => out.push(msg) });
+    await posted.fromServiceWorker({ type: 'tidal-sync', cmd: 'nudge', delta: -0.1, on: false });
+    const m = posted.find((x) => x.__yhdx === 'tidal-sync');
+    assert.equal(JSON.stringify([m.cmd, m.delta]), JSON.stringify(['nudge', -0.1]));
+    await posted.receive({ __yhdx: 'tidal-sync-state', title: 'A - B', offset: 1.5, both: true, status: 'on', closed: false, junk: 1 });
+    await posted.receive({ __yhdx: 'tidal-sync-open' });
+    await posted.receive({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: '9', videoTime: 1, playing: true, both: true });
+    assert.ok(out.some((x) => x.type === 'tidal-sync-state' && x.offset === 1.5 && x.both === true && !('junk' in x)));
+    assert.ok(out.some((x) => x.type === 'tidal-sync-open'));
+    assert.ok(out.some((x) => x.type === 'tidal-audio' && x.cmd === 'clock' && x.both === true));
+  });
+
   test('keeps the audio choices per video, cleaned', async () => {
     const local = {};
     const posted = await runBridge({}, { local });
@@ -593,6 +640,35 @@ describe('service worker: TIDAL', () => {
     assert.equal(log[0].video, 'Robbie Williams - Angels');
     await bg.send({ type: 'tidal-log-clear' }, { url: 'chrome-extension://test/options.html' });
     assert.equal(bg.local.tidalLog, undefined);
+  });
+
+  test('the Sync window: a small popup, where you left it last time, one at a time; it talks to the video\'s tab only', async () => {
+    const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+    const tick = () => new Promise((r) => setTimeout(r, 20));
+    await bg.send({ type: 'tidal-sync-open' }, { tab: { id: 5 } });
+    await tick();
+    assert.equal(bg.tabs.windows.length, 1);
+    assert.equal(bg.tabs.windows[0].type, 'popup');
+    assert.equal(bg.tabs.windows[0].url, 'chrome-extension://test/sync.html?tab=5');
+    assert.equal(bg.tabs.windows[0].left, undefined);
+    bg.local.syncWindowBounds = { left: -1500, top: 200, width: 420, height: 310 }; // on your other screen
+    await bg.send({ type: 'tidal-sync-open' }, { tab: { id: 5 } });
+    await tick();
+    assert.deepEqual([...bg.tabs.windowsClosed], [500], 'the old one closes');
+    assert.equal(JSON.stringify([bg.tabs.windows[1].left, bg.tabs.windows[1].top, bg.tabs.windows[1].width]), '[-1500,200,420]');
+    // that screen is gone: opens where Chrome likes
+    bg.tabs.refusePlace = true;
+    await bg.send({ type: 'tidal-sync-open' }, { tab: { id: 5 } });
+    await tick();
+    assert.equal(bg.tabs.windows.length, 3);
+    assert.equal(bg.tabs.windows[2].left, undefined);
+    // commands: from the window (an extension page) to the video's tab; from anywhere else, nothing
+    const ok = await bg.send({ type: 'tidal-sync', tabId: 5, cmd: 'nudge', delta: 0.1 }, { url: 'chrome-extension://test/sync.html?tab=5' });
+    assert.equal(ok, true);
+    assert.equal(JSON.stringify(bg.sentToTabs.at(-1)), JSON.stringify([5, { type: 'tidal-sync', cmd: 'nudge', delta: 0.1, on: false }]));
+    const n = bg.sentToTabs.length;
+    await bg.send({ type: 'tidal-sync', tabId: 5, cmd: 'nudge', delta: 5 }, { tab: { id: 9 }, url: 'https://evil.example/' });
+    assert.equal(bg.sentToTabs.length, n);
   });
 
   test('your TIDAL tab: opened pinned in the background, gets the song once it says hello, then the clock; answers go to the video', async () => {

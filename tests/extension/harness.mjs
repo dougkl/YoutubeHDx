@@ -298,6 +298,11 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     windows: {
       update: async (id) => { windowsFocused.push(id); },
       get: async (id) => ({ id, state: tabs.windowState ?? 'normal' }),
+      create: async (o) => {
+        if (tabs.refusePlace && o.left != null) throw new Error('Invalid value for bounds');
+        const w = { id: 500 + tabs.windows.length, ...o }; tabs.windows.push(w); return w;
+      },
+      remove: async (id) => { tabs.windowsClosed.push(id); },
     },
     debugger: {
       attach: async (target) => { if (dbg.refuse) throw new Error('Cannot attach'); dbg.log.push(['attach', target.tabId]); },
@@ -328,7 +333,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     },
   };
   const offscreen = { open: false, created: [] };
-  const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [] };
+  const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [], windows: [], windowsClosed: [] };
   const windowsFocused = [];
   const dbg = { log: [], answer: 'row', refuse: false };
   let identity = async () => { throw new Error('no sign-in in this test'); };

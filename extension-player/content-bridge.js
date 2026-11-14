@@ -102,12 +102,17 @@
     for (const k of ['at', 'videoTime', 'rate', 'offset', 'volume', 'sentAt']) if (req[k] != null) msg[k] = Number(req[k]) || 0;
     if (req.playing != null) msg.playing = !!req.playing;
     if (req.fullscreen != null) msg.fullscreen = !!req.fullscreen;
+    if (req.both != null) msg.both = !!req.both;
     if (req.via === 'web') msg.via = 'web';
     if (req.cmd === 'load' && req.title) msg.title = String(req.title).slice(0, 200);
     send(msg);
   }
 
   chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'tidal-sync') {
+      window.postMessage({ __yhdx: 'tidal-sync', cmd: String(msg.cmd || ''), delta: Number(msg.delta) || 0, on: !!msg.on }, location.origin);
+      return false;
+    }
     if (msg?.type !== 'tidal-audio-status') return false;
     window.postMessage({ __yhdx: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null,
       quality: msg.quality ?? null, bitDepth: msg.bitDepth ?? null, sampleRate: msg.sampleRate ?? null,
@@ -141,6 +146,12 @@
     else if (e.data.__yhdx === 'tidal-match-request') tidalMatch(e.data);
     else if (e.data.__yhdx === 'tidal-audio') tidalAudio(e.data);
     else if (e.data.__yhdx === 'tidal-focus') send({ type: 'tidal-focus' });
+    else if (e.data.__yhdx === 'tidal-sync-open') send({ type: 'tidal-sync-open' });
+    else if (e.data.__yhdx === 'tidal-sync-state') {
+      const d = e.data;
+      send({ type: 'tidal-sync-state', title: String(d.title || '').slice(0, 200), offset: Number(d.offset) || 0, both: !!d.both,
+             status: String(d.status || ''), closed: !!d.closed });
+    }
   });
   chrome.storage.onChanged.addListener((_changes, area) => { if (area === 'sync') push(); });
   push();

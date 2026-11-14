@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sync TIDAL · YoutubeHDx</title>
+  <link rel="stylesheet" href="sync.css">
+</head>
+<body>
+  <main>
+    <div id="song" class="song">…</div>
+    <div class="shift"><span id="offset">0.0 s</span><span id="hint" class="hint"></span></div>
+    <div class="steps">
+      <button data-d="1" title="Shift+←">◀◀ 1 s</button>
+      <button data-d="0.1" title="←">◀ 0.1 s</button>
+      <button data-d="-0.1" title="→">0.1 s ▶</button>
+      <button data-d="-1" title="Shift+→">1 s ▶▶</button>
+    </div>
+    <div class="legend"><span>◀ TIDAL sooner</span><span>TIDAL later ▶</span></div>
+    <label class="both"><input type="checkbox" id="both" checked> Hear both (the echo goes away when they're in sync) <kbd>B</kbd></label>
+    <footer>
+      <button id="done" class="primary">Keep this <kbd>Enter</kbd></button>
+      <button id="cancel">Cancel <kbd>Esc</kbd></button>
+      <button id="youtube" class="link">YouTube's sound for this video</button>
+    </footer>
+  </main>
+  <script src="sync.js"></script>
+</body>
+</html>
