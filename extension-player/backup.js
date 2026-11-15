@@ -25,8 +25,12 @@ async function yhdxBackupKv(key, value) {
     r.onerror = () => reject(r.error);
   });
 }
-const yhdxGetBackupDir = () => (typeof indexedDB === 'undefined' ? Promise.resolve(null) : yhdxBackupKv('nasDir').catch(() => null));
-const yhdxSetBackupDir = (handle) => yhdxBackupKv('nasDir', handle);
+function yhdxGetBackupDir() {
+  return typeof indexedDB === 'undefined' ? Promise.resolve(null) : yhdxBackupKv('nasDir').catch(() => null);
+}
+function yhdxSetBackupDir(handle) {
+  return yhdxBackupKv('nasDir', handle);
+}
 
 // ---------------------------------------------------------------- what goes in it
 async function yhdxBackupData(storage = chrome.storage) {
@@ -75,11 +79,4 @@ async function yhdxBackupToFolder(dir, json, now = new Date()) {
   } catch (e) {
     return `error: ${e?.message || e}`;
   }
-}
-
-function yhdxBase64(text) {
-  const bytes = new TextEncoder().encode(text);
-  let s = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(s);
 }

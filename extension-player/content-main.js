@@ -581,7 +581,7 @@
     if (!audio.track) return;
     if (!audio.syncing) audio.syncFrom = Number(state.prefs?.audioOffset) || 0;
     audio.syncing = true;
-    audio.listenBoth = true;
+    audio.listenBoth = false; // TIDAL only: the arrows shift it and you hear the result ("Hear both" is there if you want it)
     sendClock();
     window.postMessage({ __yhdx: 'tidal-sync-open' }, location.origin);
     sendSyncState();

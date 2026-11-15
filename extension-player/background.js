@@ -196,8 +196,9 @@ async function ensureOffscreen() {
 let tidalReopening = null;
 
 // ---------------------------------------------------------------- backup of your choices
-// After every change (10 s later, once): to Downloads\YoutubeHDx\player-backup.json (always works) and to the NAS
-// folder you chose in the settings (when Chrome still allows that folder; after a restart it may ask you once).
+// After every change (10 s later, once): to the NAS folder you chose in the settings, when Chrome still allows that
+// folder (after a restart it may need your OK once, in the settings). Never through Chrome's downloads: with "Ask
+// where to save each file" on, that was a Save As dialog after every change.
 const BACKUP_DELAY_MS = 10000;
 let backupTimer = null;
 
@@ -210,35 +211,10 @@ chrome.storage?.onChanged?.addListener((changes, area) => {
   if (area === 'sync' || Object.keys(changes).some((k) => k.startsWith('prefs:'))) scheduleBackup();
 });
 
-async function backupToDownloads(json) {
-  if (!chrome.downloads) return 'unavailable';
-  // No download bubble for this (it would show after every change): Chrome's download UI is off for a moment.
-  await chrome.downloads.setUiOptions?.({ enabled: false }).catch(() => {});
-  try {
-    const id = await chrome.downloads.download({ url: `data:application/json;base64,${yhdxBase64(json)}`,
-      filename: 'YoutubeHDx/player-backup.json', conflictAction: 'overwrite', saveAs: false });
-    const state = await new Promise((resolve) => {
-      const t = setTimeout(() => { chrome.downloads.onChanged.removeListener(on); resolve('slow'); }, 10000);
-      function on(d) {
-        if (d.id !== id || !d.state?.current || d.state.current === 'in_progress') return;
-        clearTimeout(t); chrome.downloads.onChanged.removeListener(on); resolve(d.state.current);
-      }
-      chrome.downloads.onChanged.addListener(on);
-    });
-    chrome.downloads.erase({ id }).catch(() => {}); // out of Chrome's download list; the file stays
-    return state === 'complete' || state === 'slow' ? 'ok' : `error: ${state}`;
-  } catch (e) {
-    return `error: ${e?.message || e}`;
-  } finally {
-    setTimeout(() => chrome.downloads.setUiOptions?.({ enabled: true }).catch(() => {}), 1500);
-  }
-}
-
 async function runBackup() {
   const data = await yhdxBackupData();
-  const json = JSON.stringify(data, null, 1);
   const status = { at: Date.now(), videos: Object.keys(data.videos).length,
-                   downloads: await backupToDownloads(json), nas: await yhdxBackupToFolder(await yhdxGetBackupDir(), json) };
+                   nas: await yhdxBackupToFolder(await yhdxGetBackupDir(), JSON.stringify(data, null, 1)) };
   await chrome.storage.local.set({ backupStatus: status });
   return status;
 }

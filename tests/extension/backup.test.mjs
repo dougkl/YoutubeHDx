@@ -8,7 +8,7 @@ import { loadPlayerBackground } from './harness.mjs';
 const src = readFileSync(new URL('../../extension-player/backup.js', import.meta.url), 'utf8');
 function loadBackup() {
   const ctx = vm.createContext({ chrome: { runtime: {} }, TextEncoder, btoa, JSON, Object, Date, Math, Error, Promise, String });
-  vm.runInContext(src + '\n;globalThis.__x = { yhdxBackupData, yhdxRestoreBackup, yhdxBackupToFolder, yhdxBase64, YHDX_BACKUP_FILE };', ctx);
+  vm.runInContext(src + '\n;globalThis.__x = { yhdxBackupData, yhdxRestoreBackup, yhdxBackupToFolder, YHDX_BACKUP_FILE };', ctx);
   return ctx.__x;
 }
 
@@ -69,38 +69,25 @@ describe('backup of your choices', () => {
     assert.equal(await B.yhdxBackupToFolder(null, '{}'), 'not set');
   });
 
-  test('text with accents survives the trip to Downloads', () => {
-    const B = loadBackup();
-    const text = JSON.stringify({ t: 'Völlig Losgelöst ♪' });
-    assert.equal(Buffer.from(B.yhdxBase64(text), 'base64').toString('utf8'), text);
-  });
-
-  test('service worker: backs up 10 s after a change, to Downloads (no download bubble, out of the download list)', async () => {
+  test('service worker: backs up 10 s after a change, once, to the folder you chose; never a download', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
       const bg = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
       const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve(); };
+      const files = {};
+      bg.ctx.yhdxGetBackupDir = async () => fakeFolder(files);
       await bg.ctx.chrome.storage.local.set({ 'prefs:abcdefghijk': { audioOffset: 2 } });
       await bg.ctx.chrome.storage.local.set({ 'prefs:abcdefghijk': { audioOffset: 2.5 } });
       mock.timers.tick(9000);
       await flush();
-      assert.equal(bg.downloads.saved.length, 0, 'waits for you to finish');
+      assert.equal(Object.keys(files).length, 0, 'waits for you to finish');
       mock.timers.tick(1000);
       await flush();
-      mock.timers.tick(1);
-      await flush();
-      assert.equal(bg.downloads.saved.length, 1, 'once');
-      const d = bg.downloads.saved[0];
-      assert.equal(JSON.stringify([d.filename, d.conflictAction, d.saveAs]), JSON.stringify(['YoutubeHDx/player-backup.json', 'overwrite', false]));
-      const data = JSON.parse(Buffer.from(d.url.split(',')[1], 'base64').toString('utf8'));
-      assert.equal(data.videos.abcdefghijk.audioOffset, 2.5);
-      mock.timers.tick(2000);
-      await flush();
-      assert.deepEqual([...bg.downloads.ui], [false, true], 'bubble off, then on again');
-      assert.deepEqual([...bg.downloads.erased], [700]);
-      assert.equal(bg.local.backupStatus.downloads, 'ok');
-      assert.equal(bg.local.backupStatus.nas, 'not set');
+      assert.equal(JSON.parse(files['YoutubeHDx-Player-backup.json']).videos.abcdefghijk.audioOffset, 2.5);
+      assert.equal(bg.downloads.saved.length, 0, 'nothing through Chrome\'s downloads (no Save As)');
+      assert.equal(bg.local.backupStatus.nas, 'ok');
       assert.equal(bg.local.backupStatus.videos, 1);
+      assert.equal('downloads' in bg.local.backupStatus, false);
     } finally {
       mock.timers.reset();
     }
@@ -110,6 +97,6 @@ describe('backup of your choices', () => {
     const bg = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
     assert.equal(await bg.send({ type: 'backup-now' }, { tab: { id: 5 }, url: 'https://www.youtube.com/' }), undefined);
     const r = await bg.send({ type: 'backup-now' }, { url: 'chrome-extension://test/options.html' });
-    assert.equal(r.downloads, 'ok');
+    assert.equal(r.nas, 'not set');
   });
 });

@@ -130,11 +130,14 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.player.video.muted, true);
   });
 
-  test('the "♪ TIDAL" label opens the small Sync window: hear both, arrows move TIDAL, keep / cancel / YouTube\'s sound', () => {
+  test('the "♪ TIDAL" label opens the small Sync window: TIDAL only (hear both if you ask), arrows move TIDAL, keep / cancel / YouTube\'s sound', () => {
     const page = playingTidal();
     const states = () => page.posted.filter((m) => m.__yhdx === 'tidal-sync-state');
     page.inPlayer('yhdx-hq')[0].click();
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-sync-open').length, 1);
+    assert.equal(audioMsgs(page, 'clock').at(-1).both, false, 'TIDAL only when it opens');
+    assert.equal(page.player.video.muted, true);
+    page.fireMessage({ __yhdx: 'tidal-sync', cmd: 'both', on: true }); // "Also hear YouTube's sound" (B)
     assert.equal(audioMsgs(page, 'clock').at(-1).both, true);
     assert.equal(page.player.video.muted, false, 'hear both');
     assert.ok(Math.abs(page.player.video.volume - 0.48) < 0.001);

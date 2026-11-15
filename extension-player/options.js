@@ -120,7 +120,7 @@ async function showBackup() {
   $('backupAllow').hidden = !dir || perm === 'granted';
   $('backupFolder').textContent = dir ? `NAS folder: ${dir.name} (change…)` : 'Choose NAS folder…';
   $('backupStatus').textContent = b
-    ? `Last backup ${when(b.at)} · ${b.videos} videos · Downloads: ${b.downloads === 'ok' ? 'saved' : b.downloads} · NAS: ${nasText[b.nas] ?? b.nas}`
+    ? `Last backup ${when(b.at)} · ${b.videos} videos · NAS: ${nasText[b.nas] ?? b.nas}`
     : 'No backup yet.';
 }
 async function backupNow() {
