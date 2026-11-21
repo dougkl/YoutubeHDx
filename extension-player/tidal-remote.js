@@ -92,6 +92,9 @@
       `bar: ${btn}, song ${tidalTrack() ?? '?'}; media: ${media || 'none'}${said ? `; TIDAL says: ${said}` : ''}`;
   }
 
+  // TIDAL's media elements have no song in them (TIDAL hasn't loaded anything yet).
+  const noSource = () => [...document.querySelectorAll('video, audio')].every((m) => !m.currentSrc || (m.readyState === 0 && m.networkState === 3));
+
   // TIDAL's own message that it can't play the song here ("Sorry, this content is currently unavailable. (NPBI0)").
   function tidalSaysUnavailable() {
     for (const e of document.querySelectorAll('[role="alert"], [role="alertdialog"], [role="dialog"], [data-test*="notification"], [data-test*="toast"], [data-test*="modal"], [data-test*="snackbar"]')) {
@@ -169,6 +172,7 @@
     stop(false);
     const mine = current = { trackId: String(msg.trackId), at: Number(msg.at) || 0, clock: null, loaded: false,
       waitingClick: false, reported: false, switching: false, changes: 0 };
+    report('diag', { detail: `got the song: ${snapshot()}` });
     const ok = await playOurs(mine);
     if (current !== mine) return;
     if (ok) {
@@ -228,10 +232,23 @@
       if (giveUpIfUnavailable(c)) return;
       const playing = findPlaying();
       if (!playing) {
-        // Sound is allowed now (a click in this tab), our song is in the player bar but paused: press the bar's Play.
-        if (navigator.userActivation?.hasBeenActive && isOurs(c) && Date.now() - (c.pressedAt || 0) > 2000) {
-          c.pressedAt = Date.now();
-          playPauseButton()?.click();
+        if (navigator.userActivation?.hasBeenActive && isOurs(c)) {
+          const bar = footer();
+          const play = bar && q('[data-test="play"]', bar);
+          if (play) {
+            // Sound is allowed now, our song is in the player bar, paused: press the bar's Play (TIDAL can take a
+            // few seconds to start; never press again before that).
+            if (Date.now() - (c.pressedAt || 0) > 8000) { c.pressedAt = Date.now(); c.stuckSince = 0; play.click(); }
+          } else if (noSource()) {
+            // TIDAL shows Pause ("playing") but has loaded nothing. Never press its button then (that would pause
+            // it while it loads); only if it stays so for 10 s: Pause, then Play again, to get it going.
+            c.stuckSince ||= Date.now();
+            if (Date.now() - c.stuckSince > 10000) {
+              c.stuckSince = Date.now();
+              playPauseButton()?.click();
+              setTimeout(() => playPauseButton()?.click(), 700);
+            }
+          }
         }
         return;
       }

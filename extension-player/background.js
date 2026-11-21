@@ -111,7 +111,7 @@ async function tidalToken() {
 const isExtensionPage = (sender) => String(sender?.url || '').startsWith(chrome.runtime.getURL(''));
 
 // ---------------------------------------------------------------- TIDAL log (settings page: what happened per song)
-const TIDAL_LOG_MAX = 40;
+const TIDAL_LOG_MAX = 80;
 const trackLabel = (t) => (t ? `${t.artists?.[0] ?? ''} – ${t.title}${t.version ? ` (${t.version})` : ''} [${t.id}]` : '');
 const trackTitles = new Map(); // track id -> video title, so the player's answers can say which song
 
@@ -339,6 +339,8 @@ async function tidalWebAudio(msg, tabId) {
     // Player's script (Chrome doesn't add it to open tabs): reload it, and it says hello.
     const unheard = await chrome.tabs.sendMessage(id, webLoad).then(() => false,
       (e) => /Receiving end does not exist|Could not establish connection/i.test(String(e?.message || e)));
+    tidalLog({ video: String(msg.title || trackTitles.get(String(msg.trackId)) || ''), step: 'player',
+      outcome: fresh ? 'opened a TIDAL tab for it' : unheard ? 'TIDAL tab did not answer: reloading it' : 'gave it to your TIDAL tab', track: `[${msg.trackId}]` });
     // (Also a tab Chrome restored after a restart but hasn't loaded yet.) One still loading says hello by itself.
     const tab = unheard && !fresh ? await chrome.tabs.get(id).catch(() => null) : null;
     if (tab && (tab.status !== 'loading' || tab.discarded)) chrome.tabs.reload(id).catch(() => {});
@@ -356,9 +358,9 @@ async function tidalWebAudio(msg, tabId) {
 // Chrome keeps your TIDAL tab silent until you click in it. The Player does that one click for you: it runs TIDAL's
 // own Play for this song as a user action, through Chrome's debugger API attached for a moment (Chrome shows a bar
 // "started debugging this browser" while it is). Once is enough for as long as that tab stays open.
-const AUTO_START_WAIT_MS = 5000;
+const AUTO_START_WAIT_MS = 10000; // TIDAL can take several seconds to start a song
 const PEEK_SETTLE_MS = 1000; // the TIDAL tab in front this long (it may start by itself) before its Play is pressed
-const PEEK_MAX_MS = 4000;    // at most this long in front, waiting for TIDAL to sound
+const PEEK_MAX_MS = 10000;   // at most this long in front, waiting for TIDAL to sound (it can take ~5-10 s)
 
 // Resolves true when TIDAL reports it plays, false after ms.
 function waitForSound(key, ms) {
@@ -381,7 +383,7 @@ async function evalAsUser(tabId, expression) {
     return null;
   }
   try {
-    const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, userGesture: true, returnByValue: true });
+    const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, userGesture: true, returnByValue: true, awaitPromise: true });
     return r?.result?.value ?? null;
   } catch {
     return null;
@@ -402,14 +404,20 @@ async function autoStartWebTab(tabId, trackId) {
     if (ours && play) { play.click(); return 'footer'; }
     // Our song with Pause showing: TIDAL is already starting it (Chrome may still be holding the sound). Clicking
     // anything now would stop it.
-    if (ours && bar.querySelector('[data-test="pause"]')) return 'starting';
+    if (ours && bar.querySelector('[data-test="pause"]')) {
+      // ... unless it has loaded nothing at all: then Pause and Play again (as you would), to get it going.
+      const empty = [...document.querySelectorAll('video, audio')].every((m) => !m.currentSrc || (m.readyState === 0 && m.networkState === 3));
+      if (!empty) return 'starting';
+      bar.querySelector('[data-test="pause"]').click();
+      return new Promise((done) => setTimeout(() => { const p = bar.querySelector('[data-test="play"]'); if (p) p.click(); done(p ? 'kicked' : 'starting'); }, 700));
+    }
     const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
     const b = row && (row.querySelector('[data-test="play-button"]') || row);
     if (b) { b.click(); return 'row'; }
     return 'none';
   })()`;
   const v = await evalAsUser(tabId, expression);
-  return v === 'row' || v === 'footer' || v === 'starting';
+  return v === 'row' || v === 'footer' || v === 'starting' || v === 'kicked';
 }
 
 async function onWebHello(tabId) {

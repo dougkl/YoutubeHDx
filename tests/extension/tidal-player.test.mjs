@@ -901,11 +901,11 @@ describe('service worker: TIDAL', () => {
       await flush();
       mock.timers.tick(1000);
       await flush();
-      mock.timers.tick(4000);
+      mock.timers.tick(10000); // TIDAL gets up to 10 s on screen
       await flush();
       assert.equal(bg.sentToTabs.filter(([id, m]) => id === web && m.cmd === 'diag').length, 1);
       await bg.send({ type: 'tidal-web-status', status: 'diag', trackId: '1', detail: 'tab visible focused, bar: Play; TIDAL says: Playing on another device' }, { tab: { id: web } });
-      mock.timers.tick(5000); // then the video says TIDAL didn't start
+      mock.timers.tick(10000); // then the video says TIDAL didn't start
       await flush();
       const log = bg.local.tidalLog;
       assert.ok(log.some((e) => e.outcome === 'diag' && /another device/.test(e.detail) && e.video === 'Ramones - Pet Sematary'));
