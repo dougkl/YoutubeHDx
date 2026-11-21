@@ -406,6 +406,7 @@
     audio.status = 'finding';
     audio.nearest = null;
     audio.widened = false;
+    if (audio.retryFor !== vd.video_id) { audio.retryFor = vd.video_id; audio.retriedUnavailable = false; }
     window.postMessage({ __yhdx: 'tidal-match-request', videoId: vd.video_id, title: vd.title, author: vd.author, duration,
                          exclude: state.prefs.rejectedTracks ?? [] }, location.origin);
     return true;
@@ -468,6 +469,26 @@
           updateSyncButton();
         }
         break;
+      case 'unavailable': {
+        // TIDAL itself can't play this version here. YouTube's sound; a choice of yours that named it is dropped,
+        // and the Player looks once more (TIDAL often has the same recording on another album).
+        const id = String(data.trackId ?? audio.track?.id ?? '');
+        const prefs = state.prefs || {};
+        let changed = false;
+        if (prefs.pickedTrack && String(prefs.pickedTrack.id) === id) { delete prefs.pickedTrack; changed = true; }
+        if (prefs.audio === 'tidal' && audio.chosen) { delete prefs.audio; delete prefs.audioOffset; changed = true; }
+        if (changed) savePrefs();
+        audioStop();
+        audio.noteFor = null;
+        showAudioNote(audio.retriedUnavailable ? "it can't play this song here (it says unavailable)" : "it can't play this version (it says unavailable) · trying another");
+        if (!audio.retriedUnavailable) {
+          audio.retriedUnavailable = true;
+          audio.requested = null;
+          audio.status = 'idle';
+          setTimeout(() => requestAudio(getPlayer()), 1500);
+        }
+        break;
+      }
       case 'gap':
         // TIDAL's song has nothing at this point of the video (a longer intro or ending): YouTube's sound meanwhile.
         if (audio.status === 'on') {

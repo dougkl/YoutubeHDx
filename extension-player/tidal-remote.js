@@ -92,6 +92,26 @@
       `bar: ${btn}, song ${tidalTrack() ?? '?'}; media: ${media || 'none'}${said ? `; TIDAL says: ${said}` : ''}`;
   }
 
+  // TIDAL's own message that it can't play the song here ("Sorry, this content is currently unavailable. (NPBI0)").
+  function tidalSaysUnavailable() {
+    for (const e of document.querySelectorAll('[role="alert"], [role="alertdialog"], [role="dialog"], [data-test*="notification"], [data-test*="toast"], [data-test*="modal"], [data-test*="snackbar"]')) {
+      const t = (e.innerText || '').trim().replace(/\s+/g, ' ');
+      if (/currently unavailable|not available (in your|for you)|unavailable in your|\(NPBI\d*\)/i.test(t)) return t.slice(0, 200);
+    }
+    return null;
+  }
+
+  // Our song can't be played on TIDAL: say so once and stop trying (the Player goes back to YouTube's sound).
+  function giveUpIfUnavailable(c) {
+    const said = isOurs(c) && tidalSaysUnavailable();
+    if (!said) return false;
+    report('unavailable', { detail: `TIDAL says: ${said}` });
+    clearInterval(loop);
+    loop = null;
+    if (current === c) current = null;
+    return true;
+  }
+
   function report(status, extra = {}) {
     if (!current || !alive()) return;
     try {
@@ -154,6 +174,8 @@
     if (ok) {
       mine.loaded = true;
       report('loaded');
+    } else if (giveUpIfUnavailable(mine)) {
+      return;
     } else {
       // Chrome only lets a page play sound after a click in it (the Player tries that click itself).
       mine.waitingClick = true;
@@ -203,6 +225,7 @@
     if (!alive()) { stop(); return; } // fade out and pause (the new copy takes over once the page asks again)
     if (c.switching) return;
     if (c.waitingClick) {
+      if (giveUpIfUnavailable(c)) return;
       const playing = findPlaying();
       if (!playing) {
         // Sound is allowed now (a click in this tab), our song is in the player bar but paused: press the bar's Play.

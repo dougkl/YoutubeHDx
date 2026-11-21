@@ -141,7 +141,7 @@ function yhdxTidalPick(video, videoSeconds, tracks) {
   let best = null;
   const rank = (t) => (t.mediaTags?.includes('HIRES_LOSSLESS') ? 2 : t.mediaTags?.includes('LOSSLESS') ? 1 : 0);
   for (const t of tracks) {
-    if (!(t.seconds > 0) || !(videoSeconds > 0) || !yhdxTidalSameSong(video, t)) continue;
+    if (!(t.seconds > 0) || !(videoSeconds > 0) || t.streamable === false || !yhdxTidalSameSong(video, t)) continue;
     const diff = Math.abs(t.seconds - videoSeconds);
     if (diff > YHDX_TIDAL_TOLERANCE_S) continue;
     const bestDiff = best ? Math.abs(best.seconds - videoSeconds) : Infinity;
@@ -182,6 +182,9 @@ async function yhdxTidalSearch(query, { fetchFn, token, country = 'US', max = 10
     version: t.attributes?.version || null,
     seconds: yhdxIsoSeconds(t.attributes?.duration),
     mediaTags: t.attributes?.mediaTags || [],
+    // TIDAL lists what a track may be used for (STREAM, DJ, STEM); one without STREAM can't be played
+    // ("Sorry, this content is currently unavailable" in TIDAL's player). No list: assume it plays.
+    streamable: !Array.isArray(t.attributes?.availability) || t.attributes.availability.includes('STREAM'),
     artists: (t.relationships?.artists?.data || []).map((a) => names.get(String(a.id))).filter(Boolean),
   }]));
   return pick.map((id) => byId.get(id)).filter(Boolean);
@@ -206,7 +209,7 @@ async function yhdxTidalFind({ title, author, duration }, { fetchFn, token, coun
       if (!(t.seconds > 0) || !yhdxTidalSameSong(video, t)) continue;
       sameSong.add(Math.round(t.seconds));
       const diff = Math.abs(t.seconds - duration);
-      if (diff <= YHDX_TIDAL_MANUAL_S && (!nearest || diff < Math.abs(nearest.seconds - duration))) nearest = t;
+      if (t.streamable !== false && diff <= YHDX_TIDAL_MANUAL_S && (!nearest || diff < Math.abs(nearest.seconds - duration))) nearest = t;
     }
   }
   if (!sameSong.size) return { track: null, reason: 'song not found on TIDAL' };

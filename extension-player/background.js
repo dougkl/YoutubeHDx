@@ -140,7 +140,7 @@ function logMatch(msg, result, remembered) {
 }
 
 function logPlayer(msg) {
-  if (!['playing', 'preview', 'error', 'revoked', 'need-click', 'changed', 'diag'].includes(msg.status)) return;
+  if (!['playing', 'preview', 'error', 'revoked', 'need-click', 'changed', 'diag', 'unavailable'].includes(msg.status)) return;
   tidalLog({ video: trackTitles.get(String(msg.trackId)) || '', step: 'player', outcome: String(msg.status),
     track: msg.trackId ? `[${msg.trackId}]` : '', detail: [msg.quality, msg.message].filter(Boolean).join(' ') });
 }
@@ -157,8 +157,12 @@ async function tidalMatchInner(msg) {
   const exclude = (Array.isArray(msg.exclude) ? msg.exclude : []).map(String).slice(0, 20);
   const key = `tidal:${msg.videoId}`;
   const hit = (await chrome.storage.local.get(key))[key];
-  // Answers "not on TIDAL" from before the matching rules last changed are asked again.
-  const stale = hit && !hit.result?.track && !hit.result?.preview && (hit.rules ?? 1) < TIDAL_MATCH_RULES;
+  // TIDAL tracks your TIDAL tab said it can't play: never again (another version of the song may play).
+  const unplayable = Object.keys(await unplayableTracks());
+  // Answers "not on TIDAL" from before the matching rules last changed are asked again; so are answers naming a
+  // track that turned out unplayable.
+  const stale = hit && ((!hit.result?.track && !hit.result?.preview && (hit.rules ?? 1) < TIDAL_MATCH_RULES)
+    || unplayable.includes(String(hit.result?.track?.id)) || unplayable.includes(String(hit.result?.nearest?.id)));
   if (hit && !stale && Date.now() - hit.at < hit.ttl && !exclude.length) {
     const r = { ...hit.result, remembered: true };
     // remembered from before 1.10 as "preview only": your TIDAL tab plays it in full now
@@ -169,12 +173,25 @@ async function tidalMatchInner(msg) {
   if (!auth) return { track: null, reason: 'not signed in to TIDAL', signedOut: true };
   const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
   const result = await yhdxTidalFindPlayable({ title: msg.title, author: msg.author, duration: Number(msg.duration) },
-    { fetchFn: (url, init) => fetch(url, init), token: auth.access, country: tidalCountry, exclude });
+    { fetchFn: (url, init) => fetch(url, init), token: auth.access, country: tidalCountry, exclude: [...new Set([...exclude, ...unplayable])].slice(0, 60) });
   // TIDAL gives this app only a preview, but your own TIDAL web player plays the full song: use that.
   if (result.preview && result.previewTrack) Object.assign(result, { track: result.previewTrack, via: 'web' });
   const ttl = result.track ? TIDAL_MATCH_TTL.found : result.preview ? TIDAL_MATCH_TTL.preview : TIDAL_MATCH_TTL.notFound;
   if (!exclude.length) await chrome.storage.local.set({ [key]: { at: Date.now(), ttl, result, rules: TIDAL_MATCH_RULES } });
   return result;
+}
+
+// { trackId: when } of TIDAL tracks your TIDAL tab couldn't play ("currently unavailable"), kept 30 days.
+const UNPLAYABLE_DAYS = 30;
+async function unplayableTracks() {
+  const { tidalUnplayable: u = {} } = await chrome.storage.local.get({ tidalUnplayable: {} });
+  const fresh = Object.fromEntries(Object.entries(u).filter(([, at]) => Date.now() - at < UNPLAYABLE_DAYS * DAY));
+  return fresh;
+}
+async function markUnplayable(trackId) {
+  const u = await unplayableTracks();
+  u[String(trackId)] = Date.now();
+  await chrome.storage.local.set({ tidalUnplayable: u });
 }
 
 let offscreenReady = null; // resolves when the offscreen page has loaded TIDAL's player and listens for commands
@@ -530,6 +547,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         const m = { type: 'tidal-audio-status', status: String(msg.status || ''), trackId: msg.trackId ?? null, quality: msg.quality ?? null, via: 'web',
           ...(msg.detail ? { message: String(msg.detail).slice(0, 600) } : {}) };
         if (m.status === 'diag') { logPlayer(m); return; } // only for the log
+        if (m.status === 'unavailable') {
+          // TIDAL itself can't play this track here: stop trying to start it, and never pick it again.
+          clearTimeout(autoStart.timer);
+          autoStart.waiting = null;
+          autoStart.sounded?.(true);
+          await markUnplayable(m.trackId);
+        }
         const forward = () => { logPlayer(m); if (tab != null) chrome.tabs.sendMessage(tab, m).catch(() => {}); };
         if (m.status === 'need-click') {
           // Do the click for you first; only if TIDAL still isn't playing a few seconds later, ask you.

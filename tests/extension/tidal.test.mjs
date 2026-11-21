@@ -46,6 +46,14 @@ describe('same recording on TIDAL', () => {
     assert.equal(pick.id, 'b');
   });
 
+  test('a TIDAL version that can\'t be streamed (no STREAM in its availability) is never picked or offered', () => {
+    const v = T.yhdxSongParse('Macy Gray - I Try (Official Video)');
+    const locked = { ...track('1', 'I Try', null, 236, ['Macy Gray']), streamable: false };
+    const open = track('2', 'I Try', null, 237, ['Macy Gray']);
+    assert.equal(T.yhdxTidalPick(v, 236, [locked, open]).id, '2');
+    assert.equal(T.yhdxTidalPick(v, 236, [locked]), null);
+  });
+
   test('several TIDAL artists, feat. guests, reversed names, channel as artist', () => {
     const same = (title, t, author) => T.yhdxTidalSameSong(T.yhdxSongParse(title, author), t);
     assert.equal(same('AronChupa & Little Sis Nora - Hole in the Roof (Official Music Video)', track('1', 'Hole in the Roof', null, 1, ['AronChupa', 'Little Sis Nora'])), true);

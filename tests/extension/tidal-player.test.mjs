@@ -1,7 +1,7 @@
 // TIDAL audio in the Player: node --test tests/extension/tidal-player.test.mjs
 import { test, describe, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { FakePlayer, createYoutubePage, loadDefaults, loadPlayerBackground, runBridge } from './harness.mjs';
+import { FakePlayer, createYoutubePage, loadDefaults, loadPlayerBackground, loadTidal, runBridge } from './harness.mjs';
 
 const { YHDX_DEFAULTS } = loadDefaults();
 const settings = (over = {}) => ({ ...structuredClone(YHDX_DEFAULTS), forceQuality: false, ...over });
@@ -378,6 +378,28 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.savedPrefs.vid1?.pickedTrack, undefined);
   });
 
+  test('TIDAL says the song is unavailable: YouTube\'s sound, your choice naming it dropped, one more look for another version', () => {
+    const page = watch();
+    page.sendTidalMatch('vid1', null, { reason: 'song not found on TIDAL' });
+    page.syncButton().click();
+    page.chooseMenu('Use the song in my TIDAL tab for this video (keeps your sync)');
+    page.fireMessage({ __yhdx: 'tidal-pick', track: { id: '777', title: 'I Try', artist: 'Macy Gray', seconds: 239, at: 40, playing: true, sentAt: Date.now() } });
+    page.sendTidalMatch('vid1', null, { reason: 'song not found on TIDAL' });
+    assert.equal(audioMsgs(page, 'load').at(-1).trackId, '777');
+    const asks = () => page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length;
+    const before = asks();
+    page.sendAudioStatus('unavailable', { trackId: '777' });
+    assert.equal(page.savedPrefs.vid1.pickedTrack, undefined, 'your pick is dropped');
+    assert.equal(audioMsgs(page, 'stop').length, 1);
+    assert.match(page.inPlayer('yhdx-hq')[0].textContent, /can't play this version/);
+    advance(1600);
+    assert.equal(asks(), before + 1, 'looks once more');
+    assert.equal(page.player.video.muted, false);
+    page.sendAudioStatus('unavailable', { trackId: '778' });
+    advance(1600);
+    assert.equal(asks(), before + 1, 'only once');
+  });
+
   test('page left over from before an update: tells you to reload it', () => {
     const page = watch();
     page.fireMessage({ __yhdx: 'stale' });
@@ -569,6 +591,39 @@ describe('service worker: TIDAL', () => {
     const n = calls.length;
     assert.equal((await bg.send(video)).track.id, '9');
     assert.equal(calls.length, n);
+  });
+
+  test('TIDAL\'s search: a track without STREAM in its availability is marked unplayable', async () => {
+    const T2 = loadTidal();
+    const fetchFn2 = async (url) => {
+      if (url.includes('searchResults')) return { ok: true, status: 200, json: async () => ({ data: [{ relationships: { tracks: { data: [{ id: '1' }, { id: '2' }] } } }] }) };
+      return { ok: true, status: 200, json: async () => ({ data: [
+        { id: '1', attributes: { title: 'I Try', duration: 'PT3M56S', availability: ['DJ'] }, relationships: { artists: { data: [{ id: 'a' }] } } },
+        { id: '2', attributes: { title: 'I Try', duration: 'PT3M57S', availability: ['STREAM', 'DJ'] }, relationships: { artists: { data: [{ id: 'a' }] } } }],
+        included: [{ id: 'a', type: 'artists', attributes: { name: 'Macy Gray' } }] }) };
+    };
+    const tracks = await T2.yhdxTidalSearch('macy gray i try', { fetchFn: fetchFn2, token: 't' });
+    assert.equal(JSON.stringify(tracks.map((t) => [t.id, t.streamable])), JSON.stringify([['1', false], ['2', true]]));
+  });
+
+  test('your TIDAL tab says a track is unavailable: never picked again, a remembered match to it is looked up anew', async () => {
+    const calls = [];
+    const bg = loadPlayerBackground({ fetchFn: fetchFn(calls) });
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3 };
+    await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '9', at: 0, via: 'web', title: 'Robbie Williams - Angels' }, { tab: { id: 5 } });
+    await new Promise((r) => setTimeout(r, 20));
+    const web = bg.tabs.created[0].id;
+    bg.local['tidal:vid1abcdefg'] = { at: Date.now(), ttl: 30 * 24 * 3600e3, rules: 4, result: { track: { id: '9', title: 'Angels' } } };
+    await bg.send({ type: 'tidal-web-status', status: 'unavailable', trackId: '9', detail: 'TIDAL says: Sorry, this content is currently unavailable. (NPBI0)' }, { tab: { id: web } });
+    await new Promise((r) => setTimeout(r, 30));
+    assert.ok(bg.local.tidalUnplayable['9']);
+    assert.ok(bg.sentToTabs.some(([id, m]) => id === 5 && m.status === 'unavailable'), 'the video is told');
+    assert.ok(bg.local.tidalLog.some((e) => e.outcome === 'unavailable' && /NPBI0/.test(e.detail) && e.video === 'Robbie Williams - Angels'));
+    const n = calls.length;
+    const r = await bg.send(video);
+    assert.ok(calls.length > n, 'looked up again, not the remembered answer');
+    assert.equal(r.track, null, 'the only same-length version is the unplayable one');
+    assert.ok(calls.some((u) => u.includes('/tracks?')));
   });
 
   test('a "not on TIDAL" answer from before the matching rules changed is asked again; a current one is kept', async () => {
