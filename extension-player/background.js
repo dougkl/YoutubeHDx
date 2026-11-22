@@ -362,6 +362,18 @@ const AUTO_START_WAIT_MS = 10000; // TIDAL can take several seconds to start a s
 const PEEK_SETTLE_MS = 1000; // the TIDAL tab in front this long (it may start by itself) before its Play is pressed
 const PEEK_MAX_MS = 10000;   // at most this long in front, waiting for TIDAL to sound (it can take ~5-10 s)
 
+// Reload the TIDAL tab (a clean TIDAL player) and wait until it has our song on its page again (its "need-click").
+const RELOAD_WAIT_MS = 15000;
+let reloadWaiter = null;
+function reloadWebTab(tabId) {
+  return new Promise((resolve) => {
+    const done = (ok) => { clearTimeout(t); if (reloadWaiter === w) reloadWaiter = null; resolve(ok); };
+    const t = setTimeout(() => done(false), RELOAD_WAIT_MS);
+    const w = reloadWaiter = { tabId, done };
+    chrome.tabs.reload(tabId).catch(() => done(false));
+  });
+}
+
 // Resolves true when TIDAL reports it plays, false after ms.
 function waitForSound(key, ms) {
   return new Promise((resolve) => {
@@ -373,26 +385,33 @@ function waitForSound(key, ms) {
 }
 const autoStart = { tried: new Set(), timer: null, waiting: null };
 
-// Runs a script in a tab as if you had clicked (Chrome's debugger, attached for a moment). Returns its value or null.
+// Runs a script in a tab as if you had clicked (Chrome's debugger, attached for a moment). Returns its value, or
+// 'no-access' when Chrome won't let the Player in. One attachment per tab, kept for a moment between calls.
+const attached = new Map(); // tabId -> pending detach timer
 async function evalAsUser(tabId, expression) {
-  if (!chrome.debugger) return null;
+  if (!chrome.debugger) return 'no-access';
   const target = { tabId };
-  try {
-    await chrome.debugger.attach(target, '1.3');
-  } catch {
-    return null;
+  if (attached.has(tabId)) clearTimeout(attached.get(tabId));
+  else {
+    try {
+      await chrome.debugger.attach(target, '1.3');
+    } catch (e) {
+      if (!/already attached/i.test(String(e?.message || e))) return 'no-access';
+    }
   }
+  attached.set(tabId, null);
   try {
     const r = await chrome.debugger.sendCommand(target, 'Runtime.evaluate', { expression, userGesture: true, returnByValue: true, awaitPromise: true });
     return r?.result?.value ?? null;
   } catch {
-    return null;
+    return 'no-access';
   } finally {
-    setTimeout(() => chrome.debugger.detach(target).catch(() => {}), 500);
+    attached.set(tabId, setTimeout(() => { attached.delete(tabId); chrome.debugger.detach(target).catch(() => {}); }, 500));
   }
 }
+chrome.debugger?.onDetach?.addListener?.((source) => { if (source.tabId != null) { clearTimeout(attached.get(source.tabId)); attached.delete(source.tabId); } });
 
-async function autoStartWebTab(tabId, trackId) {
+async function autoStartWebTab(tabId, trackId, checkOnly = false) {
   if (!/^\d{1,15}$/.test(String(trackId))) return false;
   // The song is usually already in TIDAL's player bar, paused (its first start was blocked): press the bar's Play.
   // Pressing the song's row again doesn't start an already-loaded song.
@@ -401,24 +420,25 @@ async function autoStartWebTab(tabId, trackId) {
     const link = bar && bar.querySelector('[data-test="footer-track-title"] a[href*="/track/"]');
     const play = bar && bar.querySelector('[data-test="play"]');
     const ours = link && /\\/track\\/${trackId}(\\D|$)/.test(link.getAttribute('href') || '');
-    if (ours && play) { play.click(); return 'footer'; }
+    const checkOnly = ${checkOnly ? 'true' : 'false'};
+    if (ours && play) { if (checkOnly) return 'paused'; play.click(); return 'footer'; }
     // Our song with Pause showing: TIDAL is already starting it (Chrome may still be holding the sound). Clicking
     // anything now would stop it.
     if (ours && bar.querySelector('[data-test="pause"]')) {
-      // ... unless it has loaded nothing at all: then Pause and Play again (as you would), to get it going.
+      // ... unless it has loaded nothing at all: TIDAL's player is stuck (a start Chrome held back); only a reload
+      // of the tab clears that.
       const empty = [...document.querySelectorAll('video, audio')].every((m) => !m.currentSrc || (m.readyState === 0 && m.networkState === 3));
-      if (!empty) return 'starting';
-      bar.querySelector('[data-test="pause"]').click();
-      return new Promise((done) => setTimeout(() => { const p = bar.querySelector('[data-test="play"]'); if (p) p.click(); done(p ? 'kicked' : 'starting'); }, 700));
+      return empty ? 'stuck' : 'starting';
     }
     const row = document.querySelector('[data-test="tracklist-row"][data-track-id="${trackId}"]');
     const b = row && (row.querySelector('[data-test="play-button"]') || row);
+    if (b && checkOnly) return 'not ours';
     if (b) { b.click(); return 'row'; }
     return 'none';
   })()`;
-  const v = await evalAsUser(tabId, expression);
-  return v === 'row' || v === 'footer' || v === 'starting' || v === 'kicked';
+  return (await evalAsUser(tabId, expression)) || 'none'; // footer | row | starting | stuck | none
 }
+const PRESSED = { footer: "pressed Play in TIDAL's player bar", row: 'pressed the song in TIDAL', starting: 'TIDAL was already starting it' };
 
 async function onWebHello(tabId) {
   const known = await webTab();
@@ -563,6 +583,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           await markUnplayable(m.trackId);
         }
         const forward = () => { logPlayer(m); if (tab != null) chrome.tabs.sendMessage(tab, m).catch(() => {}); };
+        if (m.status === 'need-click' && reloadWaiter && reloadWaiter.tabId === sender.tab?.id) {
+          reloadWaiter.done(true); // the reloaded TIDAL tab has our song on its page again: the Player presses Play
+          return;
+        }
         if (m.status === 'need-click') {
           // Do the click for you first; only if TIDAL still isn't playing a few seconds later, ask you.
           const key = `${sender.tab?.id}:${m.trackId}`;
@@ -571,31 +595,50 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
             autoStart.tried.add(key);
             const webId = sender.tab.id;
             const title = trackTitles.get(String(m.trackId)) || '';
-            const pressPlay = async () => {
-              const pressed = await autoStartWebTab(webId, m.trackId);
-              if (pressed) tidalLog({ video: title, step: 'player', outcome: 'started TIDAL for you (no click needed)', track: `[${m.trackId}]` });
-              return pressed;
+            const log = (outcome, detail) => tidalLog({ video: title, step: 'player', outcome, track: `[${m.trackId}]`, ...(detail ? { detail } : {}) });
+            // Press Play as you would; TIDAL stuck (Pause, nothing loaded) -> reload its tab and press again.
+            const startIt = async (soundMs) => {
+              for (let attempt = 1; attempt <= 2; attempt++) {
+                const how = await autoStartWebTab(webId, m.trackId);
+                if (PRESSED[how]) {
+                  log(`started TIDAL for you: ${PRESSED[how]}`);
+                  if (await waitForSound(key, soundMs)) return true;
+                  if (attempt === 2) return false;
+                  if ((await autoStartWebTab(webId, m.trackId, true)) !== 'stuck') return false;
+                  log('TIDAL is stuck (Pause, nothing loaded): reloading its tab and starting again');
+                } else if (how === 'stuck') {
+                  log('TIDAL is stuck (Pause, nothing loaded): reloading its tab and starting again');
+                } else {
+                  log(`couldn't press Play in the TIDAL tab (${how === 'none' ? "the song isn't on its page" : how === 'no-access' ? 'Chrome refused the Player access to the tab' : how})`);
+                  return false;
+                }
+                if (!(await reloadWebTab(webId, m.trackId))) { log('the TIDAL tab did not come back after the reload'); return false; }
+              }
+              return false;
             };
             clearTimeout(autoStart.timer);
             autoStart.waiting = key;
             if (webPlayed.has(webId)) {
-              if (!(await pressPlay())) { autoStart.waiting = null; forward(); return; }
-              autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS);
+              autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS + RELOAD_WAIT_MS);
+              if (!(await startIt(AUTO_START_WAIT_MS))) { clearTimeout(autoStart.timer); if (autoStart.waiting === key) { autoStart.waiting = null; forward(); } }
               return;
             }
             // A TIDAL tab that hasn't played since it loaded: Chrome starts its sound only while it's on screen. Show it,
-            // press Play while it's in front, and go back to the video once TIDAL sounds (a few seconds at most).
-            autoStart.timer = setTimeout(forward, AUTO_START_WAIT_MS + PEEK_MAX_MS);
+            // press Play while it's in front, and go back to the video once TIDAL sounds.
+            autoStart.timer = setTimeout(forward, PEEK_MAX_MS * 2 + RELOAD_WAIT_MS + 5000);
+            let ok = false;
             const shown = await peekWebTab(webId, tab, async () => {
               // On screen, a song TIDAL was already starting goes on by itself: give it a moment before pressing Play.
-              if (await waitForSound(key, PEEK_SETTLE_MS)) return;
-              if ((await pressPlay()) && (await waitForSound(key, PEEK_MAX_MS))) return;
+              if (await waitForSound(key, PEEK_SETTLE_MS)) { ok = true; return; }
+              ok = await startIt(PEEK_MAX_MS);
+              if (ok) return;
               // Still silent while on screen: note what the TIDAL tab shows, for the log.
               chrome.tabs.sendMessage(webId, { target: 'tidal-web', cmd: 'diag' }).catch(() => {});
               await new Promise((r) => setTimeout(r, 300));
             });
-            if (shown) tidalLog({ video: title, step: 'player', outcome: 'showed the TIDAL tab for a moment to start it (Chrome starts sound only in a tab on screen)', track: `[${m.trackId}]` });
-            else if (!(await pressPlay())) { clearTimeout(autoStart.timer); autoStart.waiting = null; forward(); }
+            if (shown) log(`showed the TIDAL tab to start it (Chrome starts sound only in a tab on screen)${ok ? '' : ': still silent'}`);
+            else { log("couldn't show the TIDAL tab (minimized window?): pressing Play there anyway"); ok = await startIt(AUTO_START_WAIT_MS); }
+            if (!ok) { clearTimeout(autoStart.timer); if (autoStart.waiting === key) { autoStart.waiting = null; forward(); } }
             return;
           }
           forward();

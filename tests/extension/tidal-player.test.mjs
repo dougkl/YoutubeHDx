@@ -887,6 +887,43 @@ describe('service worker: TIDAL', () => {
     }
   });
 
+  test('TIDAL stuck (Pause, nothing loaded): its tab is reloaded while on screen, then Play is pressed again', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: fetchFn([]) });
+      const flush = async () => { for (let i = 0; i < 60; i++) await Promise.resolve(); };
+      bg.tabs.open.push({ id: 5, url: 'https://www.youtube.com/watch?v=x', windowId: 1, active: true });
+      await bg.send({ type: 'tidal-audio', cmd: 'load', trackId: '1', at: 0, via: 'web', title: 'Night Ranger - Sister Christian' }, { tab: { id: 5 } });
+      await flush();
+      const web = bg.tabs.created[0].id;
+      bg.tabs.created[0].windowId = 1;
+      bg.dbg.answer = 'stuck';
+      bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      await flush();
+      mock.timers.tick(1000); // a moment to start by itself
+      await flush();
+      assert.deepEqual([...bg.tabs.reloaded], [web], 'stuck: reloaded');
+      // the reloaded tab has the song on its page again; this time Play works
+      bg.dbg.answer = 'row';
+      await bg.send({ type: 'tidal-web-status', status: 'need-click', trackId: '1' }, { tab: { id: web }, url: 'https://tidal.com/track/1' });
+      await flush();
+      await bg.send({ type: 'tidal-web-status', status: 'playing', trackId: '1', quality: 'LOSSLESS' }, { tab: { id: web } });
+      await flush();
+      mock.timers.tick(1000);
+      await flush();
+      assert.equal(JSON.stringify(bg.tabs.updated.at(-1)), JSON.stringify([5, { active: true }]), 'back to the video');
+      mock.timers.tick(60000);
+      await flush();
+      assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'need-click').length, 0, 'nothing to ask you');
+      const outcomes = bg.local.tidalLog.map((e) => e.outcome);
+      assert.ok(outcomes.includes('TIDAL is stuck (Pause, nothing loaded): reloading its tab and starting again'));
+      assert.ok(outcomes.includes('started TIDAL for you: pressed the song in TIDAL'));
+      assert.ok(outcomes.includes('playing'));
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
   test('TIDAL still silent while shown: the log gets what the TIDAL tab shows, and the song\'s title', async () => {
     mock.timers.enable({ apis: ['setTimeout'] });
     try {
@@ -907,7 +944,11 @@ describe('service worker: TIDAL', () => {
       await bg.send({ type: 'tidal-web-status', status: 'diag', trackId: '1', detail: 'tab visible focused, bar: Play; TIDAL says: Playing on another device' }, { tab: { id: web } });
       mock.timers.tick(10000); // then the video says TIDAL didn't start
       await flush();
+      mock.timers.tick(1000);
+      await flush();
       const log = bg.local.tidalLog;
+      assert.ok(log.some((e) => e.outcome === "started TIDAL for you: pressed the song in TIDAL"), 'what it pressed');
+      assert.ok(log.some((e) => /showed the TIDAL tab to start it.*still silent/.test(e.outcome)));
       assert.ok(log.some((e) => e.outcome === 'diag' && /another device/.test(e.detail) && e.video === 'Ramones - Pet Sematary'));
       assert.equal(bg.sentToTabs.filter(([id, m]) => id === 5 && m.status === 'diag').length, 0, 'not sent to the video');
       const ask = log.find((e) => e.outcome === 'need-click');

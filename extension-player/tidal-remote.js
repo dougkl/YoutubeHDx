@@ -51,6 +51,7 @@
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const q = (sel, root = document) => root.querySelector(sel);
   let current = null; // { trackId, clock, loaded, waitingClick, reported }
+  let playedHere = false; // this page has played a song (Chrome then lets it start the next ones in the background)
   let loop = null;
 
   // TIDAL keeps two media elements (one per upcoming track); the one playing is ours. Once found it is kept: while
@@ -159,12 +160,16 @@
     const playingAlready = row.getAttribute('data-test-is-playing') === 'true' && findPlaying() && isOurs(c);
     c.audible = !!playingAlready; // you're already hearing it (you chose it in this tab): no fade-in from silence
     if (!playingAlready) {
+      // A start this tab can't make work: no click in it yet, or hidden and it hasn't played since it loaded. Chrome
+      // holds such a start back and TIDAL's player then sticks on Pause with nothing loaded. The Player starts it
+      // instead, as you would (the tab on screen, a real user action).
+      if (!navigator.userActivation?.hasBeenActive || (document.visibilityState === 'hidden' && !playedHere)) return false;
       c.el = null;
       (q('[data-test="play-button"]', row) || row).click();
     }
     const m = await waitFor(() => { const x = findPlaying(); return x && x.readyState >= 2 && isOurs(c) ? x : null; }, 6000);
     if (current !== c) return false;
-    if (m) c.el = m;
+    if (m) { c.el = m; playedHere = true; }
     return !!m;
   }
 
@@ -232,27 +237,21 @@
       if (giveUpIfUnavailable(c)) return;
       const playing = findPlaying();
       if (!playing) {
-        if (navigator.userActivation?.hasBeenActive && isOurs(c)) {
+        if (navigator.userActivation?.hasBeenActive && isOurs(c) && (playedHere || document.visibilityState === 'visible')) {
           const bar = footer();
           const play = bar && q('[data-test="play"]', bar);
           if (play) {
             // Sound is allowed now, our song is in the player bar, paused: press the bar's Play (TIDAL can take a
             // few seconds to start; never press again before that).
             if (Date.now() - (c.pressedAt || 0) > 8000) { c.pressedAt = Date.now(); c.stuckSince = 0; play.click(); }
-          } else if (noSource()) {
-            // TIDAL shows Pause ("playing") but has loaded nothing. Never press its button then (that would pause
-            // it while it loads); only if it stays so for 10 s: Pause, then Play again, to get it going.
-            c.stuckSince ||= Date.now();
-            if (Date.now() - c.stuckSince > 10000) {
-              c.stuckSince = Date.now();
-              playPauseButton()?.click();
-              setTimeout(() => playPauseButton()?.click(), 700);
-            }
           }
+          // TIDAL shows Pause with nothing loaded: never press its button (that would pause it while it loads); if it
+          // stays stuck, the Player reloads this tab and starts it again.
         }
         return;
       }
       if (!isOurs(c)) { reselect(c); return; } // sound is allowed now, but it's another song: put ours on
+      playedHere = true;
       c.el = playing;
       c.waitingClick = false;
       c.loaded = true;
