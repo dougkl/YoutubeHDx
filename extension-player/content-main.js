@@ -191,7 +191,7 @@
 .yhdx-toast { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); z-index: 71; padding: 8px 14px;
   border-radius: 8px; background: rgba(28,28,28,.9); color: #fff; font: 500 14px Roboto, Arial, sans-serif;
   pointer-events: none; }
-.yhdx-hq { position: absolute; left: 16px; bottom: 64px; z-index: 69; padding: 6px 12px; border-radius: 16px;
+.yhdx-hq { position: absolute; right: 16px; bottom: 64px; z-index: 69; padding: 6px 12px; border-radius: 16px;
   background: rgba(0,0,0,.55); color: #fff; font: 500 13px Roboto, Arial, sans-serif; pointer-events: none;
   opacity: 0; transition: opacity 1.2s ease, bottom .25s ease, padding .6s ease, font-size .6s ease; white-space: nowrap; }
 .yhdx-hq.yhdx-show { opacity: .85; }
@@ -377,7 +377,7 @@
 
   // ---------- TIDAL audio for music videos ----------
   // If TIDAL has the same recording at the same length (see tidal.js), the extension plays TIDAL's audio and mutes
-  // YouTube's: a faded "High-quality audio found" sign shows at the bottom left. The video stays the clock; its time,
+  // YouTube's: a faded "High-quality audio found" sign shows at the bottom right. The video stays the clock; its time,
   // play/pause and speed go to the TIDAL player a few times a second, and that player keeps itself in step.
   // The ⇄ menu and YouTube's right-click menu can switch back, nudge the timing, or reject the TIDAL track.
 
@@ -398,12 +398,17 @@
     if (!state.prefs) return false;
     const vd = p.getVideoData?.() || {};
     if (!vd.video_id || audio.requested === vd.video_id) return true;
-    if (state.prefs.audio === 'youtube') { audio.requested = vd.video_id; audio.videoId = vd.video_id; audio.status = 'youtube'; return true; }
+    if (state.prefs.audio === 'youtube') {
+      audio.requested = vd.video_id; audio.videoId = vd.video_id; audio.status = 'youtube';
+      showYoutubeMini(); // your choice for this video: YouTube's sound
+      return true;
+    }
     const duration = Number(p.getDuration?.()) || 0;
     if (!(duration > 0)) return false; // metadata not loaded yet
     audio.requested = vd.video_id;
     audio.videoId = vd.video_id;
     audio.status = 'finding';
+    if (ui.hq?.classList?.contains('yhdx-yt')) hideHqBadge(); // the last video's label
     audio.nearest = null;
     audio.widened = false;
     if (audio.retryFor !== vd.video_id) { audio.retryFor = vd.video_id; audio.retriedUnavailable = false; }
@@ -740,9 +745,27 @@
     ui.hq = el;
     ui.hqTimer = setTimeout(() => {
       el.classList?.remove('yhdx-show');
-      setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 1500);
+      setTimeout(() => thenYoutubeMini(el), 1500);
     }, 6000);
   }
+
+  // The same small corner label as "♪ TIDAL", for YouTube's sound: it stays, so you always see where the sound comes
+  // from. Clicking it opens the ⇄ menu (use TIDAL anyway, the song in your TIDAL tab...).
+  function showYoutubeMini() {
+    const p = getPlayer();
+    if (!p || !settings?.tidalAudio || audio.status === 'on' || audio.status === 'gap') return;
+    ensureUiStyle();
+    hideHqBadge();
+    const el = document.createElement('div');
+    el.className = 'yhdx-hq yhdx-mini yhdx-toggle yhdx-yt yhdx-show';
+    el.setAttribute('role', 'button');
+    el.title = "YouTube's sound · click for the audio choices";
+    el.textContent = '♪ YouTube';
+    el.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(); });
+    p.appendChild(el);
+    ui.hq = el;
+  }
+  const thenYoutubeMini = (el) => { if (ui.hq === el) showYoutubeMini(); };
 
   /** Why this song keeps YouTube's sound, in the same corner for 6 s (so you can see TIDAL was tried). */
   function showAudioNote(why) {
@@ -759,7 +782,7 @@
     setTimeout(() => el.classList?.add('yhdx-show'), 30);
     ui.hqTimer = setTimeout(() => {
       el.classList?.remove('yhdx-show');
-      setTimeout(() => { if (ui.hq === el) hideHqBadge(); }, 1500);
+      setTimeout(() => thenYoutubeMini(el), 1500);
     }, 6000);
   }
 

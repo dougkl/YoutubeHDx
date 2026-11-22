@@ -47,7 +47,7 @@ describe('TIDAL audio for music videos', () => {
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 0);
   });
 
-  test('match: loads TIDAL, crossfades to it once TIDAL sounds, shows the sign bottom-left and keeps a small one there', () => {
+  test('match: loads TIDAL, crossfades to it once TIDAL sounds, shows the sign bottom-right and keeps a small one there', () => {
     const page = watch();
     page.sendTidalMatch('vid1', TRACK);
     const load = audioMsgs(page, 'load')[0];
@@ -229,10 +229,17 @@ describe('TIDAL audio for music videos', () => {
     const note = page.inPlayer('yhdx-hq')[0];                // says in the corner that TIDAL was tried, and why not
     assert.equal(note.textContent, "♪ TIDAL: only a 30-second preview of this song · YouTube's sound");
     advance(8000);
-    assert.equal(page.inPlayer('yhdx-hq').length, 0);       // then goes away
+    const mini = page.inPlayer('yhdx-hq');                   // then a small "♪ YouTube" stays in the corner
+    assert.equal(mini.length, 1);
+    assert.equal(mini[0].textContent, '♪ YouTube');
+    assert.match(mini[0].className, /yhdx-mini/);
+    mini[0].click();                                          // which opens the ⇄ menu
+    assert.ok(page.menu());
+    page.syncButton().click();
     page.player.videoId = 'vid2';
     page.fireWindow('yt-navigate-finish');
     advance(1500);
+    assert.equal(page.inPlayer('yhdx-yt').length, 0, "the last video's label goes");
     assert.equal(page.posted.filter((m) => m.__yhdx === 'tidal-match-request').length, 2);
     page.sendTidalMatch('vid2', TRACK);
     page.sendAudioStatus('loaded', { trackId: TRACK.id });
