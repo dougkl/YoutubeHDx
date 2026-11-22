@@ -80,3 +80,27 @@ async function yhdxBackupToFolder(dir, json, now = new Date()) {
     return `error: ${e?.message || e}`;
   }
 }
+
+// ---------------------------------------------------------------- the TIDAL log, as a file next to the backups
+// So you (or Claude) can read it without opening the settings: YoutubeHDx-Player-log.txt, rewritten after new entries.
+const YHDX_LOG_FILE = 'YoutubeHDx-Player-log.txt';
+
+function yhdxLogText(head, log) {
+  const lines = (Array.isArray(log) ? log : []).map((e) => {
+    const when = new Date(e.at).toLocaleString();
+    return `${when} | ${e.video || '?'} | ${e.step}: ${e.outcome}${e.track ? ` | ${e.track}` : ''}${e.detail ? ` | ${e.detail}` : ''}`;
+  });
+  return [head].concat(lines.length ? lines : ['(nothing yet: play a music video)']).join('\n');
+}
+
+/** 'ok' | 'not set' | 'needs permission' | 'error: …' */
+async function yhdxWriteLogToFolder(dir, text) {
+  if (!dir) return 'not set';
+  try {
+    if ((await dir.queryPermission({ mode: 'readwrite' })) !== 'granted') return 'needs permission';
+    await yhdxWriteFile(dir, YHDX_LOG_FILE, text);
+    return 'ok';
+  } catch (e) {
+    return `error: ${e?.message || e}`;
+  }
+}

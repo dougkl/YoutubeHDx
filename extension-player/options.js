@@ -98,11 +98,7 @@ async function tidalLogText() {
     `YoutubeHDx Player ${chrome.runtime.getManifest().version} · TIDAL audio ${s.tidalAudio ? 'on' : 'OFF'} · ` +
       `${st?.signedIn ? 'signed in to TIDAL' : 'NOT signed in to TIDAL'} · Client ID ${st?.clientId ? 'set' : 'MISSING'}`,
   ];
-  const lines = (Array.isArray(log) ? log : []).map((e) => {
-    const when = new Date(e.at).toLocaleString();
-    return `${when} | ${e.video || '?'} | ${e.step}: ${e.outcome}${e.track ? ` | ${e.track}` : ''}${e.detail ? ` | ${e.detail}` : ''}`;
-  });
-  return head.concat(lines.length ? lines : ['(nothing yet: play a music video, then Refresh)']).join('\n');
+  return yhdxLogText(head[0], log);
 }
 async function showTidalLog() { $('tidalLog').textContent = await tidalLogText(); }
 $('tidalLogRefresh').onclick = showTidalLog;

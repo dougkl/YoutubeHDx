@@ -226,7 +226,25 @@ function scheduleBackup() {
 
 chrome.storage?.onChanged?.addListener((changes, area) => {
   if (area === 'sync' || Object.keys(changes).some((k) => k.startsWith('prefs:'))) scheduleBackup();
+  if (area === 'local' && 'tidalLog' in changes) scheduleLogFile();
 });
+
+// The TIDAL log as a text file in the same folder (YoutubeHDx-Player-log.txt), 5 s after new entries.
+const LOG_FILE_DELAY_MS = 5000;
+let logFileTimer = null;
+function scheduleLogFile() {
+  clearTimeout(logFileTimer);
+  logFileTimer = setTimeout(() => { logFileTimer = null; writeLogFile(); }, LOG_FILE_DELAY_MS);
+}
+async function writeLogFile() {
+  const [{ tidalLog: log = [], tidalAuth }, clientId, settings] = await Promise.all([
+    chrome.storage.local.get({ tidalLog: [], tidalAuth: null }), tidalClientId().catch(() => null), chrome.storage.sync.get({ tidalAudio: true })]);
+  const head = `YoutubeHDx Player ${chrome.runtime.getManifest?.().version ?? ''} · TIDAL audio ${settings.tidalAudio ? 'on' : 'OFF'} · `
+    + `${tidalAuth?.refresh ? 'signed in to TIDAL' : 'NOT signed in to TIDAL'} · Client ID ${clientId ? 'set' : 'MISSING'} · written ${new Date().toLocaleString()}`;
+  const status = await yhdxWriteLogToFolder(await yhdxGetBackupDir(), yhdxLogText(head, log));
+  await chrome.storage.local.set({ logFileStatus: { at: Date.now(), status } });
+  return status;
+}
 
 async function runBackup() {
   const data = await yhdxBackupData();
@@ -531,7 +549,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'backup-now':
       if (!isExtensionPage(sender)) return false;
       clearTimeout(backupTimer);
-      runBackup().then(sendResponse, (e) => sendResponse({ error: String(e?.message || e) }));
+      Promise.all([runBackup(), writeLogFile()]).then(([b]) => sendResponse(b), (e) => sendResponse({ error: String(e?.message || e) }));
       return true;
     case 'tidal-pick':
       // "Use the song in my TIDAL tab for this video": which song is in your TIDAL tab's player bar, and where.

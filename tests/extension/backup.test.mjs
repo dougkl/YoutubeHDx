@@ -93,6 +93,33 @@ describe('backup of your choices', () => {
     }
   });
 
+  test('service worker: the TIDAL log is kept as YoutubeHDx-Player-log.txt in that folder, 5 s after new entries', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
+      const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
+      const files = {};
+      bg.ctx.yhdxGetBackupDir = async () => fakeFolder(files);
+      bg.local.tidalAuth = { access: 'a', refresh: 'r' };
+      await bg.ctx.chrome.storage.local.set({ tidalLog: [
+        { at: Date.UTC(2026, 10, 21, 1, 0), video: 'Night Ranger - Sister Christian', step: 'player', outcome: 'started TIDAL for you: pressed the song in TIDAL', track: '[74131674]' },
+        { at: Date.UTC(2026, 10, 21, 0, 59), video: 'Night Ranger - Sister Christian', step: 'player', outcome: 'diag', track: '[74131674]', detail: 'got the song: tab hidden' }] });
+      mock.timers.tick(4000);
+      await flush();
+      assert.equal(files['YoutubeHDx-Player-log.txt'], undefined, 'waits a moment');
+      mock.timers.tick(1000);
+      await flush();
+      const text = files['YoutubeHDx-Player-log.txt'];
+      assert.match(text.split('\n')[0], /^YoutubeHDx Player .* · TIDAL audio on · signed in to TIDAL · Client ID (set|MISSING) · written /);
+      assert.match(text, /Night Ranger - Sister Christian \| player: started TIDAL for you: pressed the song in TIDAL \| \[74131674\]/);
+      assert.match(text, /diag \| \[74131674\] \| got the song: tab hidden/);
+      assert.doesNotMatch(text, /"refresh"|\br\b"/, 'never the sign-in');
+      assert.equal(bg.local.logFileStatus.status, 'ok');
+    } finally {
+      mock.timers.reset();
+    }
+  });
+
   test('service worker: "Back up now" only from the settings page', async () => {
     const bg = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
     assert.equal(await bg.send({ type: 'backup-now' }, { tab: { id: 5 }, url: 'https://www.youtube.com/' }), undefined);
