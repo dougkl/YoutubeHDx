@@ -187,3 +187,51 @@ describe('ready check', () => {
     assert.equal(by['tidal-web-signin'].ok, null, "can't tell is not a problem");
   });
 });
+
+describe('error log', () => {
+  test('errors from the Player\'s parts are kept (the same one again counts up), others ignored; settings page only reads it', async () => {
+    const bg = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
+    const id = bg.ctx.chrome.runtime.id;
+    const tick = () => new Promise((r) => setTimeout(r, 20));
+    await bg.send({ type: 'yhdx-error', where: 'tidal-remote', message: 'x is not defined', stack: 'ReferenceError: x\n at chrome-extension://id/tidal-remote.js:1:1' }, { id, tab: { id: 70 }, url: 'https://tidal.com/' });
+    await bg.send({ type: 'yhdx-error', where: 'tidal-remote', message: 'x is not defined' }, { id, tab: { id: 70 }, url: 'https://tidal.com/' });
+    await bg.send({ type: 'yhdx-error', where: 'bridge', message: 'boom' }, { id, tab: { id: 5 }, url: 'https://www.youtube.com/watch?v=1' });
+    await bg.send({ type: 'yhdx-error', where: 'evil', message: 'spam' }, { id: 'some-other-extension', url: 'https://evil.example/' });
+    await tick();
+    const log = bg.local.errorLog;
+    assert.equal(log.length, 2);
+    const tidal = log.find((e) => e.where === 'tidal-remote (TIDAL tab)');
+    assert.equal(tidal.count, 2);
+    assert.match(tidal.stack, /tidal-remote\.js/);
+    assert.ok(log.some((e) => e.where === 'bridge (YouTube page)' && e.message === 'boom'));
+    assert.equal(await bg.send({ type: 'error-log' }, { tab: { id: 5 }, url: 'https://www.youtube.com/' }), undefined);
+    const fromSettings = await bg.send({ type: 'error-log' }, { url: 'chrome-extension://test/options.html' });
+    assert.equal(fromSettings.length, 2);
+    await bg.send({ type: 'error-log-clear' }, { url: 'chrome-extension://test/options.html' });
+    await tick();
+    assert.equal(bg.local.errorLog.length, 0);
+  });
+
+  test('written as YoutubeHDx-Player-errors.txt next to the TIDAL log; the ready check counts the last 24 hours', async () => {
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const bg = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
+      const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
+      const files = {};
+      bg.ctx.yhdxGetBackupDir = async () => fakeFolder(files);
+      await bg.ctx.chrome.storage.local.set({ errorLog: [{ at: Date.now(), where: 'background', message: 'TIDAL answered 503', stack: 'Error: 503\n at tidalExchange' }] });
+      mock.timers.tick(5000);
+      await flush();
+      assert.match(files['YoutubeHDx-Player-errors.txt'], /\| background \| TIDAL answered 503\n    Error: 503/);
+      assert.ok(files['YoutubeHDx-Player-log.txt']);
+    } finally {
+      mock.timers.reset();
+    }
+    const bg2 = loadPlayerBackground({ fetchFn: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
+    bg2.local.errorLog = [{ at: Date.now(), where: 'bridge', message: 'a', count: 3 }, { at: Date.now() - 3 * 86400e3, where: 'bridge', message: 'old' }];
+    const r = await bg2.send({ type: 'ready-check' }, { url: 'chrome-extension://test/options.html' });
+    const e = r.items.find((i) => i.id === 'errors');
+    assert.equal(e.ok, null);
+    assert.match(e.detail, /^3 /);
+  });
+});

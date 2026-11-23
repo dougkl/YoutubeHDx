@@ -3,6 +3,11 @@
 // any TIDAL play) — and keeps it in step with the video, which stays muted. Uses tidal.js (yhdxSyncStep).
 (() => {
   'use strict';
+  // Errors in this script go to the Player's error log (settings, and the NAS folder).
+  const reportError = (message, stack) => { try { chrome.runtime.sendMessage({ type: 'yhdx-error', where: 'tidal-remote', message: String(message || '').slice(0, 300), stack: String(stack || '').slice(0, 800) }).catch(() => {}); } catch { /* cut off */ } };
+  const ours = (stack) => /chrome-extension:\/\//.test(String(stack || ''));
+  globalThis.addEventListener?.('error', (e) => { if (ours(e.error?.stack || e.filename)) reportError(e.message, e.error?.stack || `${e.filename}:${e.lineno}`); });
+  globalThis.addEventListener?.('unhandledrejection', (e) => { if (ours(e.reason?.stack)) reportError(`unhandled: ${e.reason?.message || e.reason}`, e.reason?.stack); });
   if (window.__yhdxRemote) return;
   window.__yhdxRemote = true;
 

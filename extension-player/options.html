@@ -81,13 +81,25 @@
         <span id="tidalState" role="status"></span>
       </div>
       <h3>What happened, song by song</h3>
-      <p class="muted small">The last 40 songs: what was found on TIDAL and what TIDAL answered. "Copy" puts it all on the clipboard to paste anywhere.</p>
+      <p class="muted small">The last 80 steps: what was found on TIDAL and what TIDAL answered. "Copy" puts it all on the clipboard to paste anywhere; it is also kept as YoutubeHDx-Player-log.txt in the NAS folder (below).</p>
       <div class="row">
         <button type="button" id="tidalLogRefresh" class="secondary">Refresh</button>
         <button type="button" id="tidalLogCopy" class="secondary">Copy</button>
         <button type="button" id="tidalLogClear" class="secondary">Clear</button>
       </div>
       <pre id="tidalLog" class="log"></pre>
+    </section>
+
+    <section>
+      <h2>Errors</h2>
+      <p class="muted small">Anything that went wrong in the Player: here, on YouTube pages, in the TIDAL tab or in these windows (the last 100;
+        the same error again within 10 minutes counts up). Also kept as <b>YoutubeHDx-Player-errors.txt</b> in the NAS folder (below).</p>
+      <div class="row">
+        <button type="button" id="errorLogRefresh" class="secondary">Refresh</button>
+        <button type="button" id="errorLogCopy" class="secondary">Copy</button>
+        <button type="button" id="errorLogClear" class="secondary">Clear</button>
+      </div>
+      <pre id="errorLog" class="log"></pre>
     </section>
 
     <section>
@@ -155,6 +167,7 @@
   </main>
 
   <style id="preview-style"></style>
+  <script src="error-report.js"></script>
   <script src="defaults.js"></script>
   <script src="backup.js"></script>
   <script src="options.js"></script>

@@ -1,6 +1,11 @@
 // Isolated world: reads settings from chrome.storage and hands them to the MAIN-world player script.
 (() => {
   'use strict';
+  // Errors in this script go to the Player's error log (settings, and the NAS folder).
+  const reportError = (message, stack, where = 'bridge') => { try { chrome.runtime.sendMessage({ type: 'yhdx-error', where, message: String(message || '').slice(0, 300), stack: String(stack || '').slice(0, 800) }).catch(() => {}); } catch { /* cut off */ } };
+  const ours = (stack) => /chrome-extension:\/\//.test(String(stack || ''));
+  globalThis.addEventListener?.('error', (e) => { if (ours(e.error?.stack || e.filename)) reportError(e.message, e.error?.stack || `${e.filename}:${e.lineno}`); });
+  globalThis.addEventListener?.('unhandledrejection', (e) => { if (ours(e.reason?.stack)) reportError(`unhandled: ${e.reason?.message || e.reason}`, e.reason?.stack); });
 
   // After the Player is updated or reloaded, this copy (still running in an already-open tab) is cut off from the
   // extension: every chrome.* call fails with "Extension context invalidated". Say once that the page needs a reload.
@@ -153,6 +158,7 @@
     else if (e.data.__yhdx === 'tidal-audio') tidalAudio(e.data);
     else if (e.data.__yhdx === 'tidal-focus') send({ type: 'tidal-focus' });
     else if (e.data.__yhdx === 'tidal-sync-open') send({ type: 'tidal-sync-open' });
+    else if (e.data.__yhdx === 'error') reportError(e.data.message, e.data.stack, 'player script'); // from the Player's script on the page
     else if (e.data.__yhdx === 'tidal-pick-request') {
       send({ type: 'tidal-pick', title: String(e.data.title || '').slice(0, 300) }).then((now) => {
         const ok = now && /^\d{1,15}$/.test(String(now.id));

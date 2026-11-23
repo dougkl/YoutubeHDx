@@ -1172,6 +1172,15 @@
     schedule();
   }
 
+  // Errors in the Player's script on this page go to its error log (through the bridge).
+  const ourStack = (stack) => /chrome-extension:\/\/[^/]+\/content-main\.js/.test(String(stack || ''));
+  window.addEventListener('error', (e) => {
+    if (ourStack(e.error?.stack || e.filename)) window.postMessage({ __yhdx: 'error', message: String(e.message || '').slice(0, 300), stack: String(e.error?.stack || `${e.filename}:${e.lineno}`).slice(0, 800) }, location.origin);
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    if (ourStack(e.reason?.stack)) window.postMessage({ __yhdx: 'error', message: `unhandled: ${String(e.reason?.message || e.reason).slice(0, 280)}`, stack: String(e.reason?.stack || '').slice(0, 800) }, location.origin);
+  });
+
   window.addEventListener('message', (e) => {
     if (e.source !== window || !e.data) return;
     if (e.data.__yhdx === 'lyrics') { onLyrics(e.data); return; }

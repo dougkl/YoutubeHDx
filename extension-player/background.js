@@ -110,6 +110,35 @@ async function tidalToken() {
 // Only the extension's own pages (settings), not the YouTube content scripts.
 const isExtensionPage = (sender) => String(sender?.url || '').startsWith(chrome.runtime.getURL(''));
 
+// ---------------------------------------------------------------- error log (every part of the Player)
+// Errors from the service worker, the YouTube page, the TIDAL tab and the Player's own pages: the newest 100 (the
+// same error again within 10 minutes counts up instead of adding a line). Shown in the settings, and written as
+// YoutubeHDx-Player-errors.txt in the NAS folder, so it can be read when something goes wrong.
+const ERROR_LOG_MAX = 100;
+let errorLogQueue = Promise.resolve();
+function errorLog({ where = 'background', message = '', stack = '' } = {}) {
+  const at = Date.now();
+  const entry = { at, where: String(where).slice(0, 40), message: String(message).slice(0, 300), stack: String(stack).slice(0, 800) };
+  if (!entry.message) return errorLogQueue;
+  errorLogQueue = errorLogQueue.then(async () => {
+    try {
+      const { errorLog: log = [] } = await chrome.storage.local.get({ errorLog: [] });
+      const same = log.find((e) => e.where === entry.where && e.message === entry.message && at - e.at < 10 * 60000);
+      if (same) { same.count = (same.count || 1) + 1; same.at = at; } else log.unshift(entry);
+      log.sort((a, b) => b.at - a.at);
+      await chrome.storage.local.set({ errorLog: log.slice(0, ERROR_LOG_MAX) });
+    } catch { /* nowhere to keep it */ }
+  });
+  return errorLogQueue;
+}
+globalThis.addEventListener?.('error', (e) => errorLog({ message: e.message || e.error?.message, stack: e.error?.stack || `${e.filename}:${e.lineno}` }));
+globalThis.addEventListener?.('unhandledrejection', (e) => errorLog({ message: `unhandled: ${e.reason?.message || e.reason}`, stack: e.reason?.stack }));
+
+function errorLogText(head, log) {
+  const lines = (Array.isArray(log) ? log : []).map((e) => `${new Date(e.at).toLocaleString()} | ${e.where} | ${e.message}${e.count > 1 ? ` (×${e.count})` : ''}${e.stack ? `\n    ${e.stack.split('\n').slice(0, 4).join('\n    ')}` : ''}`);
+  return [head].concat(lines.length ? lines : ['(no errors)']).join('\n');
+}
+
 // ---------------------------------------------------------------- TIDAL log (settings page: what happened per song)
 const TIDAL_LOG_MAX = 80;
 const trackLabel = (t) => (t ? `${t.artists?.[0] ?? ''} – ${t.title}${t.version ? ` (${t.version})` : ''} [${t.id}]` : '');
@@ -226,7 +255,7 @@ function scheduleBackup() {
 
 chrome.storage?.onChanged?.addListener((changes, area) => {
   if (area === 'sync' || Object.keys(changes).some((k) => k.startsWith('prefs:'))) scheduleBackup();
-  if (area === 'local' && 'tidalLog' in changes) scheduleLogFile();
+  if (area === 'local' && ('tidalLog' in changes || 'errorLog' in changes)) scheduleLogFile();
 });
 
 // The TIDAL log as a text file in the same folder (YoutubeHDx-Player-log.txt), 5 s after new entries.
@@ -241,7 +270,12 @@ async function writeLogFile() {
     chrome.storage.local.get({ tidalLog: [], tidalAuth: null }), tidalClientId().catch(() => null), chrome.storage.sync.get({ tidalAudio: true })]);
   const head = `YoutubeHDx Player ${chrome.runtime.getManifest?.().version ?? ''} · TIDAL audio ${settings.tidalAudio ? 'on' : 'OFF'} · `
     + `${tidalAuth?.refresh ? 'signed in to TIDAL' : 'NOT signed in to TIDAL'} · Client ID ${clientId ? 'set' : 'MISSING'} · written ${new Date().toLocaleString()}`;
-  const status = await yhdxWriteLogToFolder(await yhdxGetBackupDir(), yhdxLogText(head, log));
+  const dir = await yhdxGetBackupDir();
+  const status = await yhdxWriteLogToFolder(dir, yhdxLogText(head, log));
+  if (status === 'ok') {
+    const { errorLog: errors = [] } = await chrome.storage.local.get({ errorLog: [] });
+    await yhdxWriteFile(dir, 'YoutubeHDx-Player-errors.txt', errorLogText(head.replace(/ · Client ID.*· written/, ' · written'), errors)).catch(() => {});
+  }
   await chrome.storage.local.set({ logFileStatus: { at: Date.now(), status } });
   return status;
 }
@@ -333,6 +367,10 @@ async function readyCheck({ thorough = false } = {}) {
     const w = await writeLogFile().catch((e) => `error: ${e?.message || e}`);
     add('folder', 'Backup and log folder (NAS)', w === 'ok', w === 'ok' ? `${dir.name}: writes fine` : `${dir.name}: ${w}`, 'Check that the NAS is on and the folder still exists; then choose it again.');
   }
+
+  const { errorLog: errs = [] } = await chrome.storage.local.get({ errorLog: [] });
+  const recent = errs.filter((e) => Date.now() - e.at < 24 * 3600e3).reduce((n, e) => n + (e.count || 1), 0);
+  add('errors', 'Errors in the last 24 hours', recent === 0 ? true : null, recent ? `${recent} (see "Errors" below; in the NAS folder too)` : 'none');
 
   const problems = items.filter((i) => i.ok === false);
   const result = { at: Date.now(), thorough, version: chrome.runtime.getManifest?.().version ?? '', items, problems: problems.length };
@@ -626,6 +664,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-match':
       tidalMatch(msg).then(sendResponse, (e) => {
         tidalLog({ video: String(msg.title || ''), videoId: String(msg.videoId || ''), step: 'match', outcome: 'error', detail: String(e?.message || e) });
+        errorLog({ where: 'TIDAL search', message: `${String(msg.title || '').slice(0, 80)}: ${e?.message || e}`, stack: e?.stack });
         sendResponse({ track: null, reason: String(e?.message || e), retryable: true, signedOut: e?.status === 401 });
       });
       return true;
@@ -640,6 +679,21 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
       return false;
+    case 'yhdx-error':
+      // From the Player's own scripts only (its pages and its content scripts).
+      if (sender.id !== chrome.runtime.id) return false;
+      errorLog({ where: isExtensionPage(sender) || !sender.tab ? String(msg.where || 'page')
+                   : `${String(msg.where || 'page')} (${/tidal\.com/.test(sender.url || '') ? 'TIDAL tab' : 'YouTube page'})`,
+                 message: msg.message, stack: msg.stack });
+      return false;
+    case 'error-log':
+      if (!isExtensionPage(sender)) return false;
+      chrome.storage.local.get({ errorLog: [] }).then(({ errorLog: log }) => sendResponse(log));
+      return true;
+    case 'error-log-clear':
+      if (!isExtensionPage(sender)) return false;
+      chrome.storage.local.set({ errorLog: [] }).then(() => sendResponse(true));
+      return true;
     case 'ready-check':
       if (!isExtensionPage(sender)) return false;
       readyCheck({ thorough: !!msg.thorough }).then(sendResponse, (e) => sendResponse({ error: String(e?.message || e) }));

@@ -179,3 +179,17 @@ $('readyNow').onclick = async () => {
   showReady(r);
 };
 chrome.storage.local.get({ readyCheck: null }).then(({ readyCheck }) => showReady(readyCheck));
+
+// ---------------------------------------------------------------- errors
+async function errorLogText() {
+  const log = await chrome.runtime.sendMessage({ type: 'error-log' }).catch(() => []);
+  const head = `YoutubeHDx Player ${chrome.runtime.getManifest().version} · errors`;
+  const lines = (Array.isArray(log) ? log : []).map((e) => `${new Date(e.at).toLocaleString()} | ${e.where} | ${e.message}${e.count > 1 ? ` (×${e.count})` : ''}` +
+    (e.stack ? `\n    ${e.stack.split('\n').slice(0, 4).join('\n    ')}` : ''));
+  return [head].concat(lines.length ? lines : ['(no errors)']).join('\n');
+}
+async function showErrorLog() { $('errorLog').textContent = await errorLogText(); }
+$('errorLogRefresh').onclick = showErrorLog;
+$('errorLogCopy').onclick = async () => { await navigator.clipboard.writeText(await errorLogText()); flash('Errors copied.'); };
+$('errorLogClear').onclick = async () => { await chrome.runtime.sendMessage({ type: 'error-log-clear' }); showErrorLog(); };
+showErrorLog();
