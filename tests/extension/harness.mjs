@@ -307,6 +307,12 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
       },
       remove: async (id) => { tabs.windowsClosed.push(id); },
     },
+    action: {
+      setBadgeText: async (o) => { action.badge = o.text; },
+      setBadgeBackgroundColor: async () => {},
+      setTitle: async (o) => { action.title = o.title; },
+      onClicked: { addListener: () => {} },
+    },
     downloads: {
       download: async (o) => { const id = 700 + downloads.saved.length; downloads.saved.push(o); setTimeout(() => { for (const fn of downloads.listeners) fn({ id, state: { current: 'complete' } }); }, 0); return id; },
       onChanged: { addListener: (fn) => downloads.listeners.push(fn), removeListener: (fn) => { downloads.listeners = downloads.listeners.filter((f) => f !== fn); } },
@@ -349,6 +355,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
   };
   const offscreen = { open: false, created: [] };
   const downloads = { saved: [], listeners: [], erased: [], ui: [] };
+  const action = { badge: '', title: '' };
   const tabs = { open: [], created: [], removed: [], updated: [], closed: [], deaf: [], reloaded: [], windows: [], windowsClosed: [], answer: {} };
   const windowsFocused = [];
   const dbg = { log: [], answer: 'row', refuse: false };
@@ -370,6 +377,7 @@ export function loadPlayerBackground({ fetchFn, openSubtitlesKey = '', now = () 
     session,
     syncStore,
     downloads,
+    action,
     ctx,
     offscreen,
     tabs,

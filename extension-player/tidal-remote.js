@@ -308,6 +308,24 @@
     else if (Math.abs(m.playbackRate - step.rate) > 0.0005) m.playbackRate = step.rate;
   }
 
+  // For the ready check: signed in on tidal.com? May this tab play sound without a click (Chrome's autoplay rule)?
+  const SILENCE = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  async function readyState() {
+    const signedIn = q('[data-test="header-profile-menu-button"], [data-test="user-profile"], [data-test="profile-image"]') ? true
+      : [...document.querySelectorAll('button, a')].some((b) => /^(log ?in|sign ?up|sign ?in)$/i.test((b.innerText || '').trim())) ? false : null;
+    let autoplay = 'unknown';
+    if (document.visibilityState === 'visible' || playedHere) {
+      const a = new Audio(SILENCE);
+      a.muted = false;
+      autoplay = await Promise.race([
+        a.play().then(() => 'allowed', (e) => (e?.name === 'NotAllowedError' ? 'blocked' : 'unknown')),
+        new Promise((r) => setTimeout(() => r('unknown'), 1500)),
+      ]);
+      a.pause();
+    }
+    return { signedIn, autoplay, visible: document.visibilityState === 'visible', bar: !!footer(), playedHere };
+  }
+
   // The song in TIDAL's player bar and where it is: for "Use the song in my TIDAL tab for this video".
   function nowPlaying() {
     const bar = footer();
@@ -328,6 +346,7 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.target !== 'tidal-web') return false;
     if (msg.cmd === 'which') { sendResponse(nowPlaying()); return false; }
+    if (msg.cmd === 'check') { readyState().then(sendResponse); return true; }
     if (msg.cmd === 'load') load(msg);
     else if (msg.cmd === 'clock' && current && String(msg.trackId) === current.trackId) {
       current.clock = { videoTime: Number(msg.videoTime) || 0, playing: !!msg.playing, rate: Number(msg.rate) || 1,

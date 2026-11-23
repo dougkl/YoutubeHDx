@@ -152,3 +152,30 @@ $('backupFile').onchange = async (e) => {
   }
 };
 showBackup();
+
+// ---------------------------------------------------------------- ready check
+function showReady(r) {
+  const list = $('readyList');
+  list.textContent = '';
+  if (!r?.items) { $('readyWhen').textContent = 'Not checked yet.'; return; }
+  for (const i of r.items) {
+    const li = document.createElement('li');
+    li.className = i.ok === true ? 'ok' : i.ok === false ? 'bad' : 'unknown';
+    const mark = document.createElement('span'); mark.className = 'mark'; mark.textContent = i.ok === true ? '✓' : i.ok === false ? '✗' : '?';
+    const what = document.createElement('span'); what.className = 'what'; what.textContent = `${i.label} `;
+    const detail = document.createElement('span'); detail.className = 'detail'; detail.textContent = `— ${i.detail}`;
+    what.appendChild(detail);
+    li.append(mark, what);
+    if (i.ok !== true && i.fix) { const fix = document.createElement('span'); fix.className = 'fix'; fix.textContent = i.fix; li.appendChild(fix); }
+    list.appendChild(li);
+  }
+  $('readyWhen').textContent = `${r.problems ? `${r.problems} thing(s) to fix` : 'Everything ready'} · checked ${new Date(r.at).toLocaleString()}`;
+}
+$('readyNow').onclick = async () => {
+  $('readyNow').disabled = true;
+  $('readyWhen').textContent = 'Checking… (it may open your TIDAL tab to test it)';
+  const r = await chrome.runtime.sendMessage({ type: 'ready-check', thorough: true }).catch(() => null);
+  $('readyNow').disabled = false;
+  showReady(r);
+};
+chrome.storage.local.get({ readyCheck: null }).then(({ readyCheck }) => showReady(readyCheck));

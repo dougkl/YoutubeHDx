@@ -127,3 +127,63 @@ describe('backup of your choices', () => {
     assert.equal(r.nas, 'not set');
   });
 });
+
+describe('ready check', () => {
+  const okFetch = async (url) => {
+    if (String(url).includes('lrclib.net')) return { ok: true, status: 200, json: async () => [] };
+    if (String(url).includes('searchResults')) return { ok: true, status: 200, json: async () => ({ data: [{ relationships: { tracks: { data: [{ id: '1' }] } } }] }) };
+    if (String(url).includes('/tracks')) return { ok: true, status: 200, json: async () => ({ data: [{ id: '1', attributes: { title: 'Bohemian Rhapsody', duration: 'PT5M55S' }, relationships: { artists: { data: [{ id: 'a' }] } } }], included: [{ id: 'a', type: 'artists', attributes: { name: 'Queen' } }] }) };
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+
+  test('nothing set up yet: says what to fix, a red ! on the icon, and a line in the TIDAL log', async () => {
+    const bg = loadPlayerBackground({ fetchFn: okFetch });
+    const r = await bg.send({ type: 'ready-check' }, { url: 'chrome-extension://test/options.html' });
+    const by = Object.fromEntries(r.items.map((i) => [i.id, i]));
+    assert.equal(by['tidal-signin'].ok, false);
+    assert.match(by['tidal-signin'].fix, /Sign in to TIDAL/);
+    assert.equal(by['tidal-tab'].ok, null, 'no TIDAL tab yet is fine: it opens with the first song');
+    assert.equal(by.folder.ok, false);
+    assert.equal(by.lyrics.ok, true);
+    assert.ok(r.problems >= 2);
+    assert.equal(bg.action.badge, '!');
+    await new Promise((res) => setTimeout(res, 20));
+    assert.equal(bg.local.tidalLog[0].step, 'ready check');
+    assert.match(bg.local.tidalLog[0].detail, /PROBLEM Signed in to TIDAL/);
+    assert.equal(await bg.send({ type: 'ready-check' }, { tab: { id: 5 }, url: 'https://www.youtube.com/' }), undefined, 'only from the settings page');
+  });
+
+  test('all set: TIDAL tab answers, the Player can press Play, folder writes; no badge', async () => {
+    const bg = loadPlayerBackground({ fetchFn: okFetch });
+    bg.local.tidalClientId = 'abc';
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3 };
+    bg.tabs.open.push({ id: 70, url: 'https://tidal.com/' });
+    bg.session.tidalWebTab = 70;
+    bg.tabs.answer[70] = (m) => (m.cmd === 'check' ? { signedIn: true, autoplay: 'allowed', visible: false, bar: true } : undefined);
+    bg.dbg.answer = 1;
+    const files = {};
+    bg.ctx.yhdxGetBackupDir = async () => ({ name: 'Backups', queryPermission: async () => 'granted',
+      getFileHandle: async (name) => ({ createWritable: async () => ({ write: async (t) => { files[name] = t; }, close: async () => {} }) }) });
+    const r = await bg.send({ type: 'ready-check' }, { url: 'chrome-extension://test/options.html' });
+    const bad = r.items.filter((i) => i.ok === false).map((i) => `${i.id}: ${i.detail}`);
+    assert.equal(JSON.stringify(bad), '[]');
+    assert.equal(r.problems, 0);
+    assert.equal(bg.action.badge, '');
+    assert.ok(files['YoutubeHDx-Player-log.txt'], 'the log file was written as the folder test');
+    assert.equal(r.items.find((i) => i.id === 'tidal-search').ok, true);
+    assert.equal(r.items.find((i) => i.id === 'debugger').ok, true);
+  });
+
+  test('autoplay blocked in the TIDAL tab: reported with the fix', async () => {
+    const bg = loadPlayerBackground({ fetchFn: okFetch });
+    bg.local.tidalAuth = { access: 'tok', refresh: 'r', expires: Date.now() + 3600e3 };
+    bg.tabs.open.push({ id: 70, url: 'https://tidal.com/' });
+    bg.session.tidalWebTab = 70;
+    bg.tabs.answer[70] = (m) => (m.cmd === 'check' ? { signedIn: null, autoplay: 'blocked', visible: true, bar: true } : undefined);
+    const r = await bg.send({ type: 'ready-check' }, { url: 'chrome-extension://test/options.html' });
+    const by = Object.fromEntries(r.items.map((i) => [i.id, i]));
+    assert.equal(by.autoplay.ok, false);
+    assert.match(by.autoplay.fix, /admin/);
+    assert.equal(by['tidal-web-signin'].ok, null, "can't tell is not a problem");
+  });
+});

@@ -10,6 +10,18 @@
     <h1>YoutubeHDx Player</h1>
     <p class="muted">Applies to every video you watch on youtube.com in this browser.</p>
 
+    <section id="readySection">
+      <h2>Ready check</h2>
+      <p class="muted small">Tests everything the Player needs: TIDAL sign-in and search, your TIDAL tab, sound without a click,
+        lyrics, and the NAS folder. It runs by itself when Chrome starts and after an update; a red <b>!</b> on the
+        Player's icon means something needs fixing.</p>
+      <ul id="readyList" class="ready"></ul>
+      <div class="row">
+        <button type="button" id="readyNow" class="secondary">Check now</button>
+        <span id="readyWhen" class="muted small"></span>
+      </div>
+    </section>
+
     <section>
       <h2>Playback quality</h2>
       <label class="row"><input type="checkbox" id="forceQuality"> Always switch to my preferred quality</label>

@@ -254,6 +254,100 @@ async function runBackup() {
   return status;
 }
 
+// ---------------------------------------------------------------- ready check
+// Is everything the Player needs ready? When Chrome starts and after an install/update (a light check: it opens and
+// reloads nothing), and from the settings page ("Check now": it may open the TIDAL tab to test it). A problem shows
+// as a red "!" on the Player's icon; the result goes to the TIDAL log (and so to the log file on the NAS).
+// Each item: ok true (ready) / false (a problem, with how to fix it) / null (can't tell yet, with why).
+const READY_STARTUP_DELAY_MS = 20000;
+
+async function readyCheck({ thorough = false } = {}) {
+  const items = [];
+  const add = (id, label, ok, detail = '', fix = '') => items.push({ id, label, ok, detail, fix });
+  const settings = await chrome.storage.sync.get({ tidalAudio: true });
+
+  // TIDAL sign-in and search (finding the songs)
+  const clientId = await tidalClientId().catch(() => '');
+  add('tidal-client', 'TIDAL app (Client ID)', !!clientId, clientId ? 'set' : 'missing', 'Run Install-Latest-Player.cmd again (it fills in the Client ID).');
+  let token = null;
+  try { token = await tidalToken(); } catch (e) { token = null; }
+  add('tidal-signin', 'Signed in to TIDAL', !!token?.access, token?.access ? 'yes' : 'no (or the sign-in expired)', 'Player settings → Sign in to TIDAL.');
+  if (token?.access) {
+    try {
+      const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
+      const found = await yhdxTidalSearch('Queen Bohemian Rhapsody', { fetchFn: (u, i) => fetch(u, i), token: token.access, country: tidalCountry, max: 3 });
+      add('tidal-search', 'TIDAL search (finding the songs)', found.length > 0, found.length ? `works (${found.length} results)` : 'no results', 'Try again in a minute; TIDAL may be having problems.');
+    } catch (e) {
+      add('tidal-search', 'TIDAL search (finding the songs)', false, String(e?.message || e).slice(0, 120), 'Try again in a minute; if it stays, sign in to TIDAL again.');
+    }
+  }
+  if (!settings.tidalAudio) add('tidal-audio', 'TIDAL audio', null, 'turned off in the settings', 'Player settings → TIDAL audio.');
+
+  // Your TIDAL tab (where the songs play)
+  let webId = await webTab();
+  if (webId == null) webId = (await chrome.tabs.query({ url: ['https://tidal.com/*', 'https://listen.tidal.com/*'] }).catch(() => []))[0]?.id ?? null;
+  if (webId == null && thorough) {
+    const win = (await chrome.windows?.getLastFocused?.().catch(() => null)) || null;
+    const tab = await chrome.tabs.create({ url: `${TIDAL_WEB_URL}/`, active: false, pinned: true, ...(win?.id != null ? { windowId: win.id } : {}) }).catch(() => null);
+    if (tab) { webId = tab.id; await sessionSet({ tidalWebTab: tab.id }); await new Promise((r) => setTimeout(r, 8000)); }
+  }
+  if (webId == null) {
+    add('tidal-tab', 'TIDAL tab', null, 'none open yet: the Player opens one (pinned) with the first song', '"Check now" in the settings opens it to test it.');
+  } else {
+    let check = await chrome.tabs.sendMessage(webId, { target: 'tidal-web', cmd: 'check' }).catch(() => undefined);
+    if (check === undefined && thorough) {
+      await chrome.tabs.reload(webId).catch(() => {});
+      await new Promise((r) => setTimeout(r, 8000));
+      check = await chrome.tabs.sendMessage(webId, { target: 'tidal-web', cmd: 'check' }).catch(() => undefined);
+    }
+    if (!check) {
+      add('tidal-tab', 'TIDAL tab', thorough ? false : null, thorough ? "the Player's script doesn't answer in it" : 'open from before the Player was updated (reloaded with the next song)',
+        thorough ? 'Close the TIDAL tab; the Player opens a new one with the next song.' : '');
+    } else {
+      add('tidal-tab', 'TIDAL tab', true, `open${check.visible ? '' : ' (in the background)'}`);
+      add('tidal-web-signin', 'Signed in on tidal.com', check.signedIn === true ? true : check.signedIn === false ? false : null,
+        check.signedIn ? 'yes' : check.signedIn === false ? 'no' : "can't tell (TIDAL's page is still loading?)",
+        'Open the TIDAL tab and log in to tidal.com.');
+      add('autoplay', 'TIDAL may play sound without a click', check.autoplay === 'allowed' ? true : check.autoplay === 'blocked' ? false : null,
+        check.autoplay === 'allowed' ? 'yes (Chrome autoplay allow-list)' : check.autoplay === 'blocked' ? 'no' : "can't tell while the tab is in the background",
+        check.autoplay === 'blocked' ? 'Run Install-Latest-Player.cmd, answer Yes to the admin prompt, then restart Chrome. (The Player can still start it for you.)' : '');
+      const dbg = await evalAsUser(webId, '1');
+      add('debugger', 'The Player can press Play in the TIDAL tab', dbg === 1, dbg === 1 ? 'yes' : 'Chrome refused', 'Reload the Player on chrome://extensions.');
+    }
+  }
+
+  // Lyrics (subtitles for songs without them)
+  try {
+    const r = await fetch('https://lrclib.net/api/search?q=queen%20bohemian%20rhapsody', { headers: { 'Lrclib-Client': 'YoutubeHDx Player' } });
+    add('lyrics', 'Lyrics service (LRCLIB)', r.ok, r.ok ? 'reachable' : `answered ${r.status}`, 'Try again later; songs without subtitles show none meanwhile.');
+  } catch (e) {
+    add('lyrics', 'Lyrics service (LRCLIB)', false, 'not reachable', 'Check the internet connection.');
+  }
+
+  // Backup and log folder on the NAS
+  const dir = await yhdxGetBackupDir();
+  const perm = dir ? await dir.queryPermission({ mode: 'readwrite' }).catch(() => 'prompt') : null;
+  if (!dir) add('folder', 'Backup and log folder (NAS)', false, 'not chosen', 'Player settings → Choose NAS folder… (e.g. F:\\Music (videos)\\Software\\YoutubeHDx\\Backups).');
+  else if (perm !== 'granted') add('folder', 'Backup and log folder (NAS)', false, `${dir.name}: Chrome needs your OK again`, 'Player settings → Allow the NAS folder again.');
+  else {
+    const w = await writeLogFile().catch((e) => `error: ${e?.message || e}`);
+    add('folder', 'Backup and log folder (NAS)', w === 'ok', w === 'ok' ? `${dir.name}: writes fine` : `${dir.name}: ${w}`, 'Check that the NAS is on and the folder still exists; then choose it again.');
+  }
+
+  const problems = items.filter((i) => i.ok === false);
+  const result = { at: Date.now(), thorough, version: chrome.runtime.getManifest?.().version ?? '', items, problems: problems.length };
+  await chrome.storage.local.set({ readyCheck: result });
+  await chrome.action?.setBadgeText?.({ text: problems.length ? '!' : '' }).catch(() => {});
+  await chrome.action?.setBadgeBackgroundColor?.({ color: '#d93025' }).catch(() => {});
+  await chrome.action?.setTitle?.({ title: problems.length ? `YoutubeHDx Player: ${problems.length} thing(s) to fix — click for the settings` : 'YoutubeHDx Player settings' }).catch(() => {});
+  tidalLog({ video: '', step: 'ready check', outcome: problems.length ? `${problems.length} problem(s)` : 'everything ready',
+    detail: items.map((i) => `${i.ok === true ? 'OK' : i.ok === false ? 'PROBLEM' : '?'} ${i.label}: ${i.detail}`).join(' · ') });
+  return result;
+}
+
+chrome.runtime.onStartup?.addListener(() => setTimeout(() => readyCheck().catch(() => {}), READY_STARTUP_DELAY_MS));
+chrome.runtime.onInstalled?.addListener(() => setTimeout(() => readyCheck().catch(() => {}), READY_STARTUP_DELAY_MS));
+
 // ---------------------------------------------------------------- the small Sync window
 // A popup window you can drag to another monitor; it opens where you left it last time.
 const SYNC_SIZE = { width: 400, height: 300 };
@@ -546,6 +640,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case 'tidal-audio':
       if (sender.tab?.id != null) tidalAudio(msg, sender.tab.id);
       return false;
+    case 'ready-check':
+      if (!isExtensionPage(sender)) return false;
+      readyCheck({ thorough: !!msg.thorough }).then(sendResponse, (e) => sendResponse({ error: String(e?.message || e) }));
+      return true;
     case 'backup-now':
       if (!isExtensionPage(sender)) return false;
       clearTimeout(backupTimer);
