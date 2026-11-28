@@ -45,7 +45,7 @@ class Busy(Exception):
     """TIDAL keeps saying 'too many requests': stop, and try this video again on the next run."""
 
 
-def stream_url(t, tries=6):
+def stream_url(t, tries=3):
     wait = 30
     for _ in range(tries):
         try:
@@ -56,7 +56,7 @@ def stream_url(t, tries=6):
     raise Busy()
 
 
-PACE = 4  # seconds between TIDAL streams
+PACE = 10  # seconds between TIDAL streams (TIDAL refuses bursts)
 
 
 def measure(s, tidalapi, vid, title, path):
@@ -91,7 +91,9 @@ def work(wk, nw):
         except Busy:
             print(f"[{wk}] TIDAL is busy: stopping here; the next run carries on", flush=True); break
         except Exception as e:
+            print(f"[{wk}] {i+1}/{len(items)} {vid} failed ({str(e)[:80]}), tried again next run: {title}", flush=True)
             if not old: done[vid] = {"status": "error", "error": str(e)[:200], "title": title}
+            continue
         print(f"[{wk}] {i+1}/{len(items)} {vid} {done[vid]['status']} {done[vid].get('reason','')} {title}", flush=True)
         json.dump(done, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=0)
 
