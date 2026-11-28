@@ -1,7 +1,7 @@
 {
  "format": 1,
- "algorithm": 3,
- "updated": "2026-11-28T04:31:35Z",
+ "algorithm": 4,
+ "updated": "2026-11-28T04:46:23Z",
  "videos": {
   "-0QBxwRhAmA": {
    "status": "ok",
@@ -470,6 +470,14 @@
    "tidalTitle": "Chumbawamba - Tubthumping (Radio Edit)",
    "algorithm": 1
   },
+  "2Mp8AudqJAw": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 35243715,
+   "tidalTitle": "Don Felder - Heavy Metal (Take a Ride) [Soundtrack Version]",
+   "title": "HEAVY METAL takin' a ride--Don Felder",
+   "algorithm": 3
+  },
   "2lqdErI9uss": {
    "status": "ok",
    "tidal": 35986247,
@@ -875,6 +883,14 @@
    "title": "The Boomtown Rats   I Don't Like Mondays",
    "algorithm": 1
   },
+  "5yziRK36wTU": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 3392919,
+   "tidalTitle": "Bonnie Tyler - Total Eclipse of the Heart",
+   "title": "Bonnie Tyler - Total Eclipse of the Heart (Live from Tim Rice, 1983)",
+   "algorithm": 3
+  },
   "616-QGQyx-I": {
    "status": "ok",
    "tidal": 11009839,
@@ -1032,15 +1048,15 @@
   "6ZAWNgEbdqA": {
    "status": "ok",
    "tidal": 493602844,
-   "offset": -7.643,
+   "offset": -7.621,
    "scale": 1.0,
    "quality": "LOSSLESS",
-   "resid": 0.005,
+   "resid": 0.0,
    "good": 12,
    "of": 12,
    "title": "Blondie - Maria (Official Music Video)",
    "tidalTitle": "Blondie - Maria",
-   "algorithm": 1
+   "algorithm": 3
   },
   "6Zbi0XmGtMw": {
    "status": "ok",
@@ -1186,15 +1202,15 @@
   "7nqcL0mjMjw": {
    "status": "ok",
    "tidal": 77659870,
-   "offset": -7.935,
-   "scale": 0.999075,
+   "offset": -7.915,
+   "scale": 0.999091,
    "quality": "LOSSLESS",
    "resid": 0.008,
    "good": 12,
    "of": 12,
    "title": "Aerosmith - Livin' On The Edge (Official Music Video)",
    "tidalTitle": "Aerosmith - Livin' On The Edge",
-   "algorithm": 1
+   "algorithm": 3
   },
   "7s8glZ-efMg": {
    "status": "ok",
@@ -1439,15 +1455,15 @@
   "9wfpXI5PKlw": {
    "status": "ok",
    "tidal": 48983071,
-   "offset": -11.574,
+   "offset": -11.541,
    "scale": 1.0,
    "quality": "LOSSLESS",
-   "resid": 0.015,
+   "resid": 0.012,
    "good": 12,
    "of": 12,
    "title": "Spice Girls - Spice Up Your Life (Official Music Video)",
    "tidalTitle": "Spice Girls - Spice up Your Life (From \"Spiceworld\")",
-   "algorithm": 1
+   "algorithm": 3
   },
   "AEYN5w4T_aM": {
    "status": "ok",
@@ -1510,12 +1526,17 @@
    "algorithm": 1
   },
   "AW1JoiMintM": {
-   "status": "keep-youtube",
-   "reason": "nomatch",
-   "tidal": 36434841,
-   "tidalTitle": "Scorpions - No One Like You",
+   "status": "ok",
+   "tidal": 93428851,
+   "offset": -0.649,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.019,
+   "good": 12,
+   "of": 12,
    "title": "Scorpions - No One Like You",
-   "algorithm": 1
+   "tidalTitle": "Scorpions - No One Like You (Live)",
+   "algorithm": 3
   },
   "AYT7y6lFJtw": {
    "status": "ok",
@@ -1818,15 +1839,15 @@
   "CdqoNKCCt7A": {
    "status": "ok",
    "tidal": 54287688,
-   "offset": -1.374,
-   "scale": 0.998923,
+   "offset": -1.368,
+   "scale": 0.998928,
    "quality": "LOSSLESS",
-   "resid": 0.004,
+   "resid": 0.002,
    "good": 12,
    "of": 12,
    "title": "Simple Minds - Don't You (Forget About Me)",
    "tidalTitle": "Simple Minds - Don't You (Forget About Me)",
-   "algorithm": 1
+   "algorithm": 3
   },
   "CduA0TULnow": {
    "status": "ok",
@@ -1924,6 +1945,19 @@
    "title": "Lenka - Heart Skips A Beat (Official Version)",
    "tidalTitle": "Lenka - Heart Skips A Beat",
    "algorithm": 1
+  },
+  "DtVBCG6ThDk": {
+   "status": "ok",
+   "tidal": 334634,
+   "offset": -2.864,
+   "scale": 1.001674,
+   "quality": "LOSSLESS",
+   "resid": 0.006,
+   "good": 12,
+   "of": 12,
+   "title": "Elton John - Rocket Man (Official Music Video)",
+   "tidalTitle": "Elton John - Rocket Man (I Think It's Going To Be A Long, Long Time)",
+   "algorithm": 3
   },
   "DwRXI-y6M9o": {
    "status": "ok",
@@ -2048,6 +2082,14 @@
    "title": "Earth, Wind & Fire - September (Official HD Video)",
    "algorithm": 1
   },
+  "Hphwfq1wLJs": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 268978550,
+   "tidalTitle": "N-Trance - Da Ya Think I'm Sexy?",
+   "title": "Rod Stewart - Da Ya Think I'm Sexy？ (Official HD Remastered Video)",
+   "algorithm": 3
+  },
   "KXFA6YEqK_A": {
    "status": "ok",
    "tidal": 77447199,
@@ -2061,6 +2103,40 @@
    "tidalTitle": "Mr. Big - To Be With You",
    "algorithm": 1
   },
+  "Odcn6qk94bs": {
+   "status": "ok",
+   "tidal": 105048158,
+   "offset": -101.916,
+   "scale": 0.999087,
+   "quality": "LOSSLESS",
+   "resid": 0.036,
+   "good": 12,
+   "of": 12,
+   "title": "Eagles - I Can't Tell You Why (Official Video) [HD]",
+   "tidalTitle": "Eagles - I Can't Tell You Why (Live On MTV, 1994)",
+   "algorithm": 3
+  },
+  "Pkgd3tER1yI": {
+   "status": "keep-youtube",
+   "reason": "nomatch",
+   "tidal": 193335269,
+   "tidalTitle": "STEREO DUB - Everybody Wants to Rule the World (Dataset Extended Mix)",
+   "title": "Tears for Fears — Everybody Wants to Rule the World ｜ LIVE Performance ｜ SiriusXM",
+   "algorithm": 3
+  },
+  "RK34uNGvMbs": {
+   "status": "ok",
+   "tidal": 21852468,
+   "offset": -63.547,
+   "scale": 1.001002,
+   "quality": "LOSSLESS",
+   "resid": 0.002,
+   "good": 12,
+   "of": 12,
+   "title": "The Clash - Should I Stay or Should I Go (Live at Shea Stadium, 1982)",
+   "tidalTitle": "The Clash - Should I Stay or Should I Go (Live at Shea Stadium) [Remastered]",
+   "algorithm": 3
+  },
   "RQa7SvVCdZk": {
    "status": "ok",
    "tidal": 35972940,
@@ -2072,6 +2148,134 @@
    "of": 12,
    "title": "Christina Aguilera, Lil' Kim, Mya, P!nk - Lady Marmalade",
    "tidalTitle": "Christina Aguilera - Lady Marmalade (From \"Moulin Rouge\" Soundtrack)",
+   "algorithm": 3
+  },
+  "S3DhXcQepbY": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 395319,
+   "tidalTitle": "Stevie Nicks - Edge of Seventeen (with the Melbourne Symphony) [Live 2006]",
+   "title": "Stevie Nicks - Edge Of Seventeen (Live In Chicago)",
+   "algorithm": 4
+  },
+  "UQn-7GCh2r0": {
+   "status": "ok",
+   "tidal": 105885815,
+   "offset": -4.792,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Toto - Africa",
+   "tidalTitle": "TOTO - Africa (Live)",
+   "algorithm": 3
+  },
+  "XzSrShbqlz8": {
+   "status": "keep-youtube",
+   "reason": "nomatch",
+   "tidal": 1190938,
+   "tidalTitle": "George Harrison - While My Guitar Gently Weeps (Live In Japan, 1991 / 2004 Mix)",
+   "title": "George Harrison & Ringo Starr - While My Guitar Gently Weeps (The Prince's Trust Rock Gala 1987)",
+   "algorithm": 3
+  },
+  "ZHwVBirqD2s": {
+   "status": "ok",
+   "tidal": 330964,
+   "offset": 0.484,
+   "scale": 1.001275,
+   "quality": "LOSSLESS",
+   "resid": 0.002,
+   "good": 12,
+   "of": 12,
+   "title": "Elton John - I'm Still Standing",
+   "tidalTitle": "Elton John - I'm Still Standing",
+   "algorithm": 3
+  },
+  "ghhEPM3RWxc": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 1970835,
+   "tidalTitle": "Spandau Ballet - True (Live from the N.E.C.)",
+   "title": "Spandau Ballet - True (Live Aid 1985)",
+   "algorithm": 3
+  },
+  "god7hAPv8f0": {
+   "status": "segments",
+   "tidal": 26703889,
+   "segments": [
+    [
+     0.0,
+     0.18,
+     1.0
+    ],
+    [
+     8.75,
+     -0.297,
+     0.998733
+    ],
+    [
+     269.93,
+     0.259,
+     1.0
+    ],
+    [
+     274.18,
+     -0.659,
+     1.0
+    ],
+    [
+     280.67,
+     -149.291,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Earth, Wind & Fire - Boogie Wonderland (Official Video)",
+   "tidalTitle": "Earth, Wind & Fire - Boogie Wonderland (with The Emotions)",
+   "algorithm": 4
+  },
+  "hKIpKtXcVio": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 112262391,
+   "tidalTitle": "Suede - Beautiful Ones",
+   "title": "Suede - Beautiful Ones ｜ Radio 2 in the Park 2025",
+   "algorithm": 3
+  },
+  "i3MKTm-49uI": {
+   "status": "ok",
+   "tidal": 31848416,
+   "offset": -8.128,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.003,
+   "good": 12,
+   "of": 12,
+   "title": "Evanescence - Bring Me To Life",
+   "tidalTitle": "Evanescence - Bring Me To Life (Live From Le Zénith,France/2004)",
+   "algorithm": 3
+  },
+  "k0WHSYFY21w": {
+   "status": "ok",
+   "tidal": 491207444,
+   "offset": -23.619,
+   "scale": 0.99663,
+   "quality": "LOSSLESS",
+   "resid": 0.03,
+   "good": 11,
+   "of": 12,
+   "title": "Motley Crue - Kickstart My Heart (Official HD Remaster)",
+   "tidalTitle": "Mötley Crüe - Kickstart My Heart (From Live, Entertainment, or Death)",
+   "algorithm": 3
+  },
+  "mcouO3YM-aA": {
+   "status": "keep-youtube",
+   "reason": "nomatch",
+   "tidal": 90320813,
+   "tidalTitle": "Whitney Houston - I Wanna Dance With Somebody (Junior's Happy Handbag Mix)",
+   "title": "I Wanna Dance With Somebody - Whitney Houston - funk cover ft. Olivia Kuper Harris",
    "algorithm": 3
   },
   "n2MtEsrcTTs": {
@@ -2087,13 +2291,26 @@
    "tidalTitle": "Neil Young - Harvest Moon",
    "algorithm": 3
   },
+  "nENrB7hvplY": {
+   "status": "ok",
+   "tidal": 79976712,
+   "offset": 2.713,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Deep Purple, London Symphony Orchestra - Smoke On The Water (Live)",
+   "tidalTitle": "Deep Purple - Smoke On The Water (Live)",
+   "algorithm": 3
+  },
   "opYXf2WXKFE": {
    "status": "keep-youtube",
    "reason": "nomatch",
    "tidal": 172592969,
    "tidalTitle": "Billy Idol - Eyes Without A Face (Poolside Remix)",
    "title": "Billy Idol - Eyes Without a Face ｜ LIVE Performance ｜ The Spectrum ｜ SiriusXM",
-   "algorithm": 3
+   "algorithm": 4
   },
   "tH2w6Oxx0kQ": {
    "status": "ok",
@@ -2107,6 +2324,74 @@
    "title": "Kansas - Dust in the Wind (Official Video)",
    "tidalTitle": "Kansas - Dust in the Wind",
    "algorithm": 3
+  },
+  "tQsqLx0yYXQ": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 373381125,
+   "tidalTitle": "Eric Clapton - Layla (Live at Live Aid, John F. Kennedy Stadium, 13th July 1985)",
+   "title": "Eric Clapton - Layla (The Prince's Trust Rock Gala 1988)",
+   "algorithm": 3
+  },
+  "wO0A0XcWy88": {
+   "status": "segments",
+   "tidal": 170985466,
+   "segments": [
+    [
+     0.0,
+     0.649,
+     1.0
+    ],
+    [
+     3.0,
+     -0.067,
+     0.994218
+    ],
+    [
+     73.23,
+     -1.237,
+     1.0
+    ],
+    [
+     83.73,
+     -0.08,
+     0.994268
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Peter Schilling - Major Tom (Coming Home) (Official Video)",
+   "tidalTitle": "Peter Schilling - Major Tom (Coming Home) [Single Version]",
+   "algorithm": 4
+  },
+  "wv-34w8kGPM": {
+   "status": "keep-youtube",
+   "reason": "nomatch",
+   "tidal": 1330757,
+   "tidalTitle": "Divinyls - I Touch Myself",
+   "title": "Divinyls - I Touch Myself (Official Music Video)",
+   "algorithm": 4
+  },
+  "z92bmlcmyq0": {
+   "status": "segments",
+   "tidal": 74131674,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     15.74,
+     -6.391,
+     1.008351
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.94,
+   "title": "Night Ranger - Sister Christian (Official Music Video)",
+   "tidalTitle": "Night Ranger - Sister Christian",
+   "algorithm": 4
   }
  }
 }
