@@ -83,7 +83,12 @@ def work(wk, nw):
     s = tidalapi.Session(); s.load_session_from_file(SESSION); s.audio_quality = tidalapi.Quality.high_lossless
     f = OUT / f"w{wk}.json"
     done = json.load(open(f, encoding="utf-8")) if f.exists() else {}
-    items = sorted(library().items())[wk::nw]
+    lib = library()
+    # Your most-collected artists first (the songs you play most), then the rest.
+    from collections import Counter
+    artist = lambda title: parse(title, "")["artist"]
+    count = Counter(artist(t) for t, _ in lib.values())
+    items = sorted(lib.items(), key=lambda kv: (-count[artist(kv[1][0])], kv[1][0].lower()))[wk::nw]
     for i, (vid, (title, path)) in enumerate(items):
         old = done.get(vid)
         if old and (old.get("algorithm", 1) >= ALGORITHM or old.get("reason") == "not-on-tidal"): continue
