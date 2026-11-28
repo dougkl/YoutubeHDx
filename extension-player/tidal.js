@@ -136,7 +136,7 @@ function yhdxTidalSameSong(video, track) {
   });
 }
 
-/** The same recording at the same length (best: closest length, then Hi-Res) or null. */
+/** The same recording at the same length (best: Hi-Res / lossless, then closest length) or null. */
 function yhdxTidalPick(video, videoSeconds, tracks) {
   let best = null;
   const rank = (t) => (t.mediaTags?.includes('HIRES_LOSSLESS') ? 2 : t.mediaTags?.includes('LOSSLESS') ? 1 : 0);
@@ -145,7 +145,9 @@ function yhdxTidalPick(video, videoSeconds, tracks) {
     const diff = Math.abs(t.seconds - videoSeconds);
     if (diff > YHDX_TIDAL_TOLERANCE_S) continue;
     const bestDiff = best ? Math.abs(best.seconds - videoSeconds) : Infinity;
-    if (!best || diff < bestDiff - 0.5 || (Math.abs(diff - bestDiff) <= 0.5 && rank(t) > rank(best))) best = t;
+    // Lossless / Hi-Res first among the ones within 2 s (a lossy copy 0 s off loses to a lossless one 2 s off:
+    // the sync file or the sync loop takes care of the difference), then the closest length.
+    if (!best || rank(t) > rank(best) || (rank(t) === rank(best) && diff < bestDiff)) best = t;
   }
   return best;
 }
@@ -267,6 +269,45 @@ function yhdxSyncStep(audio, target, videoRate = 1) {
   if (Math.abs(drift) <= 0.02) return { seek: null, rate: videoRate };
   const correction = Math.max(-0.04, Math.min(0.04, drift * 0.5)); // close the gap in ~2 s, at most 4% off speed
   return { seek: null, rate: videoRate * (1 - correction) };
+}
+
+const yhdxScale = (x) => { const n = Number(x); return n > 0.9 && n < 1.1 ? n : 1; };
+
+/**
+ * Where TIDAL should be now. `k` is the video's clock {videoTime, playing, sentAt, rate, offset, scale}: TIDAL time =
+ * video time x scale + offset. The scale is the speed difference the sync file measured (e.g. 0.999 for a video
+ * transferred at NTSC speed); without one it's 1, as before.
+ */
+function yhdxSyncTarget(k, now = Date.now()) {
+  const video = k.videoTime + (k.playing ? ((now - k.sentAt) / 1000) * k.rate : 0);
+  return video * yhdxScale(k.scale) + (k.offset || 0);
+}
+
+/** TIDAL's playing speed for the video's: the video's speed x the measured scale. */
+function yhdxSyncRate(k) {
+  return (Number(k.rate) || 1) * yhdxScale(k.scale);
+}
+
+// ---------------------------------------------------------------- the published sync file
+
+const YHDX_SYNC_FILE_URL = 'https://raw.githubusercontent.com/dougkl/YoutubeHDx/main/sync/tidal-sync.json';
+
+/**
+ * This video's entry in the sync file (tools/tidalsync measures them; sync/tidal-sync.json in the repo), or null.
+ * {status: 'ok', tidal, offset, scale, stamp} or {status: 'keep-youtube', reason}. Anything malformed is ignored.
+ */
+function yhdxSyncEntry(file, videoId) {
+  if (!file || file.format !== 1 || !file.videos || typeof file.videos !== 'object') return null;
+  const e = file.videos[videoId];
+  if (!e || typeof e !== 'object') return null;
+  if (e.status === 'keep-youtube') return { status: 'keep-youtube', reason: String(e.reason || '') };
+  if (e.status !== 'ok') return null;
+  const tidal = String(e.tidal ?? '');
+  const offset = Number(e.offset);
+  const scale = e.scale == null ? 1 : Number(e.scale);
+  if (!/^\d{1,15}$/.test(tidal) || typeof e.offset !== 'number' || !Number.isFinite(offset) || Math.abs(offset) > 600
+      || !(scale > 0.9 && scale < 1.1)) return null;
+  return { status: 'ok', tidal, offset, scale, stamp: `${tidal}:${offset}:${scale}` };
 }
 
 // ---------------------------------------------------------------- sign-in helpers (PKCE)

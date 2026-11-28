@@ -75,6 +75,10 @@
     if (p?.audio === 'youtube' || p?.audio === 'tidal') out.audio = p.audio; // 'tidal': TIDAL's nearest version anyway
     const audioOffset = Math.max(-600, Math.min(600, Math.round((Number(p?.audioOffset) || 0) * 100) / 100));
     if (audioOffset) out.audioOffset = audioOffset;
+    // From the published sync file: TIDAL's measured speed vs the video's, and which measurement was applied.
+    const audioScale = Math.round((Number(p?.audioScale) || 1) * 1e6) / 1e6;
+    if (audioScale !== 1 && audioScale > 0.9 && audioScale < 1.1) out.audioScale = audioScale;
+    if (typeof p?.syncStamp === 'string' && p.syncStamp) out.syncStamp = p.syncStamp.slice(0, 80);
     // The TIDAL song you chose yourself (in your TIDAL tab) for this video.
     const t = p?.pickedTrack;
     if (t && /^\d{1,15}$/.test(String(t.id))) {
@@ -102,7 +106,14 @@
       artists: (Array.isArray(n.artists) ? n.artists : []).map(String).slice(0, 5), seconds: Number(n.seconds) || 0 } : null;
     window.postMessage({ __yhdx: 'tidal-match', videoId: msg.videoId, track: result?.track ?? null,
       reason: result?.reason ?? null, signedOut: !!result?.signedOut, preview: !!result?.preview,
-      via: result?.via === 'web' ? 'web' : null, nearest }, location.origin);
+      via: result?.via === 'web' ? 'web' : null, nearest, keepYoutube: !!result?.keepYoutube, sync: syncOf(result?.sync) }, location.origin);
+  }
+
+  // The sync file's measurement for this video (offset, speed), checked again here before the page gets it.
+  function syncOf(s) {
+    const offset = Number(s?.offset), scale = Number(s?.scale);
+    if (!s || !Number.isFinite(offset) || Math.abs(offset) > 600 || !(scale > 0.9 && scale < 1.1)) return null;
+    return { offset, scale, stamp: String(s.stamp || '').slice(0, 80) };
   }
 
   const AUDIO_CMDS = new Set(['load', 'clock', 'stop']);
@@ -110,7 +121,7 @@
     if (!AUDIO_CMDS.has(req.cmd)) return;
     const msg = { type: 'tidal-audio', cmd: req.cmd };
     if (req.trackId != null) msg.trackId = String(req.trackId).replace(/\D/g, '').slice(0, 15);
-    for (const k of ['at', 'videoTime', 'rate', 'offset', 'volume', 'sentAt']) if (req[k] != null) msg[k] = Number(req[k]) || 0;
+    for (const k of ['at', 'videoTime', 'rate', 'offset', 'scale', 'volume', 'sentAt']) if (req[k] != null) msg[k] = Number(req[k]) || 0;
     if (req.playing != null) msg.playing = !!req.playing;
     if (req.fullscreen != null) msg.fullscreen = !!req.fullscreen;
     if (req.both != null) msg.both = !!req.both;

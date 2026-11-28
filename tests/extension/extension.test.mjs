@@ -607,7 +607,7 @@ describe('extension split', () => {
   const player = readManifest('player');
   const downloader = readManifest('downloader');
 
-  test('player never gets cookies or native messaging; only lyrics sites and TIDAL besides YouTube', () => {
+  test('player never gets cookies or native messaging; only lyrics sites, TIDAL and the sync file on GitHub besides YouTube', () => {
     assert.deepEqual(player.permissions, ['storage', 'identity', 'offscreen', 'debugger']);
     // no downloads: the backup goes to the folder you pick (Chrome's downloads asked "Save as" after every change)
     assert.doesNotMatch(readFileSync(new URL('../../extension-player/background.js', import.meta.url), 'utf8'), /chrome\.downloads\./);
@@ -620,7 +620,7 @@ describe('extension split', () => {
     assert.ok(player.key && player.key.length > 300);
     assert.notEqual(player.key, downloader.key);
     for (const host of player.host_permissions) {
-      assert.match(host, /^https:\/\/(lrclib\.net|api\.opensubtitles\.com|\*\.opensubtitles\.(com|org)|openapi\.tidal\.com|auth\.tidal\.com|\*\.tidal\.com)\/\*$/);
+      assert.match(host, /^https:\/\/(lrclib\.net|api\.opensubtitles\.com|\*\.opensubtitles\.(com|org)|openapi\.tidal\.com|auth\.tidal\.com|\*\.tidal\.com|raw\.githubusercontent\.com)\/\*$/);
     }
     assert.ok(!player.host_permissions.some((h) => h.includes('youtube')));
   });

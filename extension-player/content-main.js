@@ -427,6 +427,20 @@
     }
     // You chose TIDAL's version anyway for this video (lengths differ a little; you sync it with the ⇄ menu).
     if (!data.track && data.nearest && state.prefs?.audio === 'tidal' && settings?.tidalAudio) data = { ...data, track: data.nearest, via: 'web', chosen: true };
+    // The published sync file measured this video: its offset and speed, once per measurement (a nudge you make
+    // after it stays until a newer measurement comes).
+    if (!picked && data.track && data.sync && state.prefs && state.prefs.syncStamp !== data.sync.stamp) {
+      state.prefs.audioOffset = data.sync.offset;
+      state.prefs.audioScale = data.sync.scale;
+      state.prefs.syncStamp = data.sync.stamp;
+      savePrefs();
+    }
+    // The sync file says this video's edit differs from TIDAL's song: YouTube's sound, quietly.
+    if (!data.track && data.keepYoutube && !picked) {
+      audio.status = 'none';
+      updateSyncButton();
+      return;
+    }
     if (!data.track) {
       audio.status = data.preview ? 'preview' : 'none';
       audio.nearest = data.nearest || null;
@@ -450,7 +464,7 @@
     const offset = Number(state.prefs?.audioOffset) || 0;
     audio.via = data.via === 'web' ? 'web' : null;
     window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id, via: audio.via, title: p.getVideoData?.()?.title || '',
-                         at: Math.max(0, (Number(p.getCurrentTime?.()) || 0) + offset) }, location.origin);
+                         at: Math.max(0, (Number(p.getCurrentTime?.()) || 0) * (Number(state.prefs?.audioScale) || 1) + offset) }, location.origin);
     startAudioClock();
   }
 
@@ -583,7 +597,7 @@
     const playing = Boolean(v && !v.paused && !v.seeking && !ad && (v.readyState ?? 4) >= 3);
     const volume = p.isMuted?.() ? 0 : (Number(p.getVolume?.() ?? 100) / 100);
     window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: Number(p.getCurrentTime?.()) || 0,
-                         playing, rate: Number(v?.playbackRate) || 1, offset: Number(state.prefs?.audioOffset) || 0,
+                         playing, rate: Number(v?.playbackRate) || 1, offset: Number(state.prefs?.audioOffset) || 0, scale: Number(state.prefs?.audioScale) || 1,
                          volume, fullscreen: !!document.fullscreenElement, both: !!audio.listenBoth, sentAt: Date.now() }, location.origin);
   }
 
@@ -892,6 +906,7 @@
     }
     prefs.pickedTrack = { id: t.id, title: t.title, artist: t.artist, seconds: t.seconds };
     prefs.audioOffset = offset;
+    delete prefs.audioScale; delete prefs.syncStamp; // your own pick: no measured speed
     if (prefs.audio === 'youtube') delete prefs.audio;
     savePrefs();
     toast(`TIDAL for this video: ${t.artist ? `${t.artist} – ` : ''}${t.title}${offset ? ` (${fmtOffset()})` : ''}`);
@@ -910,6 +925,7 @@
     const prefs = (state.prefs ||= {});
     prefs.audio = 'tidal';
     prefs.audioOffset = offset;
+    delete prefs.audioScale; delete prefs.syncStamp;
     savePrefs();
     audio.requested = null;
     audio.status = 'idle';

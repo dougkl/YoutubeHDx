@@ -577,6 +577,7 @@ describe('service worker: TIDAL', () => {
   const tracksDoc = { data: [{ id: '9', attributes: { title: 'Angels', duration: 'PT4M24S', mediaTags: ['LOSSLESS'] }, relationships: { artists: { data: [{ id: 'r' }] } } }],
                       included: [{ id: 'r', type: 'artists', attributes: { name: 'Robbie Williams' } }] };
   const fetchFn = (calls) => async (url, init) => {
+    if (url.startsWith('https://raw.githubusercontent.com/')) return { ok: false, status: 404, json: async () => ({}) }; // no sync file here
     calls.push(url);
     if (url.includes('searchResults')) return { ok: true, status: 200, json: async () => ({ data: [{ relationships: { tracks: { data: [{ id: '9' }] } } }] }) };
     return { ok: true, status: 200, json: async () => tracksDoc };

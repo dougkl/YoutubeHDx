@@ -100,7 +100,7 @@ async function tick() {
   const c = current;
   if (!c?.loaded || !c.clock) return;
   const k = c.clock;
-  const target = k.videoTime + (k.playing ? ((Date.now() - k.sentAt) / 1000) * k.rate : 0) + (k.offset || 0);
+  const target = yhdxSyncTarget(k); // video time x measured speed + offset
   const state = Player.getPlaybackState();
   Player.setVolumeLevel(Math.max(0, Math.min(1, k.volume ?? 1)));
 
@@ -125,7 +125,7 @@ async function tick() {
     report('playing', { quality: ctx?.actualAudioQuality || null, bitDepth: ctx?.bitDepth || null, sampleRate: ctx?.sampleRate || null });
   }
   if (!media) return;
-  const step = yhdxSyncStep(media.currentTime, target, k.rate);
+  const step = yhdxSyncStep(media.currentTime, target, yhdxSyncRate(k));
   if (step.seek != null) { note(`jump ${media.currentTime.toFixed(2)} -> ${step.seek.toFixed(2)}`); await Player.seek(step.seek); }
   else if (Math.abs(media.playbackRate - step.rate) > 0.0005) media.playbackRate = step.rate;
 }
@@ -169,7 +169,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       load({ tabId: msg.tabId, trackId: msg.trackId, at: Number(msg.videoTime) || 0 }); // sets a new `current` at once
     }
     current.clock = { videoTime: Number(msg.videoTime) || 0, playing: !!msg.playing, rate: Number(msg.rate) || 1,
-      offset: Number(msg.offset) || 0, volume: msg.volume, sentAt: Number(msg.sentAt) || Date.now() };
+      offset: Number(msg.offset) || 0, scale: Number(msg.scale) || 1, volume: msg.volume, sentAt: Number(msg.sentAt) || Date.now() };
   } else if (msg.cmd === 'stop' && (!current || msg.tabId === current.tabId)) stop();
   return false;
 });

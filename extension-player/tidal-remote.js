@@ -278,7 +278,7 @@
     const m = media();
     if (!c.loaded || !c.clock || !m) return;
     const k = c.clock;
-    const target = k.videoTime + (k.playing ? ((Date.now() - k.sentAt) / 1000) * k.rate : 0) + (k.offset || 0);
+    const target = yhdxSyncTarget(k); // video time x measured speed + offset
     // Never to the end of TIDAL's song: TIDAL would go on to another song by itself.
     const atEnd = Number.isFinite(m.duration) && m.duration > 1 && target >= m.duration - 0.3;
     if (!k.playing || target < 0 || atEnd) {
@@ -308,7 +308,7 @@
       if (!k.both) forgetVolume();
     }
     if (m.seeking) return;
-    const step = yhdxSyncStep(m.currentTime, target, k.rate);
+    const step = yhdxSyncStep(m.currentTime, target, yhdxSyncRate(k));
     if (step.seek != null) m.currentTime = step.seek;
     else if (Math.abs(m.playbackRate - step.rate) > 0.0005) m.playbackRate = step.rate;
   }
@@ -355,7 +355,7 @@
     if (msg.cmd === 'load') load(msg);
     else if (msg.cmd === 'clock' && current && String(msg.trackId) === current.trackId) {
       current.clock = { videoTime: Number(msg.videoTime) || 0, playing: !!msg.playing, rate: Number(msg.rate) || 1,
-        offset: Number(msg.offset) || 0, both: !!msg.both, sentAt: Number(msg.sentAt) || Date.now() };
+        offset: Number(msg.offset) || 0, scale: Number(msg.scale) || 1, both: !!msg.both, sentAt: Number(msg.sentAt) || Date.now() };
       tick(); // a hidden tab's timers can be slow: every clock is also a tick
     } else if (msg.cmd === 'stop') stop();
     else if (msg.cmd === 'diag' && current) report('diag', { detail: snapshot() });

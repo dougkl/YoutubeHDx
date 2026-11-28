@@ -190,6 +190,23 @@ async function tidalMatchInner(msg) {
   const unplayable = Object.keys(await unplayableTracks());
   // Answers "not on TIDAL" from before the matching rules last changed are asked again; so are answers naming a
   // track that turned out unplayable.
+  // The published sync file (measured ahead of time): its track, offset and speed; or "keep YouTube's sound".
+  const syncDoc = await syncFile();
+  const sync = yhdxSyncEntry(syncDoc, msg.videoId);
+  if (sync?.status === 'keep-youtube' && !exclude.length) {
+    return { track: null, keepYoutube: true, reason: `sync file: keep YouTube's sound (${sync.reason || 'checked'})` };
+  }
+  if (sync?.status === 'ok' && !exclude.includes(sync.tidal) && !unplayable.includes(sync.tidal)) {
+    const auth = await tidalToken();
+    if (!auth) return { track: null, reason: 'not signed in to TIDAL', signedOut: true };
+    const { tidalCountry } = await chrome.storage.local.get({ tidalCountry: 'US' });
+    const pres = await yhdxTidalPresentation(sync.tidal, { fetchFn: (url, init) => fetch(url, init), token: auth.access, country: tidalCountry });
+    const name = String(syncDoc.videos[msg.videoId]?.tidalTitle || '');
+    const cut = name.indexOf(' - ');
+    const track = { id: sync.tidal, title: cut > 0 ? name.slice(cut + 3) : name, artists: cut > 0 ? [name.slice(0, cut)] : [], seconds: null };
+    return { track, sync: { offset: sync.offset, scale: sync.scale, stamp: sync.stamp }, query: 'sync file',
+             ...(pres === 'PREVIEW' ? { via: 'web' } : {}) };
+  }
   const stale = hit && ((!hit.result?.track && !hit.result?.preview && (hit.rules ?? 1) < TIDAL_MATCH_RULES)
     || unplayable.includes(String(hit.result?.track?.id)) || unplayable.includes(String(hit.result?.nearest?.id)));
   if (hit && !stale && Date.now() - hit.at < hit.ttl && !exclude.length) {
@@ -208,6 +225,31 @@ async function tidalMatchInner(msg) {
   const ttl = result.track ? TIDAL_MATCH_TTL.found : result.preview ? TIDAL_MATCH_TTL.preview : TIDAL_MATCH_TTL.notFound;
   if (!exclude.length) await chrome.storage.local.set({ [key]: { at: Date.now(), ttl, result, rules: TIDAL_MATCH_RULES } });
   return result;
+}
+
+// The sync file from the GitHub repo (sync/tidal-sync.json), kept in storage; fetched again every 6 hours. If GitHub
+// can't be reached, the last good copy stays.
+const SYNC_FILE_REFRESH_MS = 6 * 60 * 60 * 1000;
+let syncFileMemo = null;
+async function syncFile({ force = false } = {}) {
+  if (!syncFileMemo) syncFileMemo = (await chrome.storage.local.get({ tidalSyncFile: null })).tidalSyncFile;
+  if (force && syncFileMemo) syncFileMemo = { ...syncFileMemo, at: 0 };
+  if (syncFileMemo && Date.now() - syncFileMemo.at < SYNC_FILE_REFRESH_MS) return syncFileMemo.doc;
+  try {
+    const r = await fetch(YHDX_SYNC_FILE_URL, { cache: 'no-store' });
+    if (r.ok) {
+      const doc = await r.json();
+      if (doc?.format === 1 && doc.videos && typeof doc.videos === 'object') {
+        syncFileMemo = { at: Date.now(), doc };
+        await chrome.storage.local.set({ tidalSyncFile: syncFileMemo });
+      }
+    }
+  } catch { /* offline: keep the last good copy */ }
+  // Not reached (or not a sync file): try again in 10 minutes, not with every song; the last good copy meanwhile.
+  const retry = Date.now() - SYNC_FILE_REFRESH_MS + 10 * 60 * 1000;
+  if (!syncFileMemo) syncFileMemo = { at: retry, doc: null };
+  else if (Date.now() - syncFileMemo.at >= SYNC_FILE_REFRESH_MS) syncFileMemo.at = retry;
+  return syncFileMemo?.doc ?? null;
 }
 
 // { trackId: when } of TIDAL tracks your TIDAL tab couldn't play ("currently unavailable"), kept 30 days.
@@ -299,6 +341,12 @@ async function readyCheck({ thorough = false } = {}) {
   const items = [];
   const add = (id, label, ok, detail = '', fix = '') => items.push({ id, label, ok, detail, fix });
   const settings = await chrome.storage.sync.get({ tidalAudio: true });
+
+  // The published sync file (videos synced for you)
+  const sf = await syncFile({ force: thorough }).catch(() => null);
+  add('sync-file', 'Sync file (videos synced for you)', sf ? true : null,
+    sf ? `${Object.keys(sf.videos).length} videos, measured ${String(sf.updated || '').slice(0, 10)}` : 'not loaded yet',
+    'It loads from GitHub (dougkl/YoutubeHDx, sync/tidal-sync.json): check the internet connection.');
 
   // TIDAL sign-in and search (finding the songs)
   const clientId = await tidalClientId().catch(() => '');
