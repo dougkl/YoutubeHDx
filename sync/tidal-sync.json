@@ -1,7 +1,7 @@
 {
  "format": 1,
- "algorithm": 2,
- "updated": "2026-11-28T03:49:16Z",
+ "algorithm": 3,
+ "updated": "2026-11-28T04:31:35Z",
  "videos": {
   "-0QBxwRhAmA": {
    "status": "ok",
@@ -2060,6 +2060,53 @@
    "title": "To Be With You - Mr. Big (from LEAN INTO IT home video)",
    "tidalTitle": "Mr. Big - To Be With You",
    "algorithm": 1
+  },
+  "RQa7SvVCdZk": {
+   "status": "ok",
+   "tidal": 35972940,
+   "offset": -7.184,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.008,
+   "good": 12,
+   "of": 12,
+   "title": "Christina Aguilera, Lil' Kim, Mya, P!nk - Lady Marmalade",
+   "tidalTitle": "Christina Aguilera - Lady Marmalade (From \"Moulin Rouge\" Soundtrack)",
+   "algorithm": 3
+  },
+  "n2MtEsrcTTs": {
+   "status": "ok",
+   "tidal": 49651283,
+   "offset": -7.977,
+   "scale": 0.999007,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Neil Young - Harvest Moon [Official Music Video]",
+   "tidalTitle": "Neil Young - Harvest Moon",
+   "algorithm": 3
+  },
+  "opYXf2WXKFE": {
+   "status": "keep-youtube",
+   "reason": "nomatch",
+   "tidal": 172592969,
+   "tidalTitle": "Billy Idol - Eyes Without A Face (Poolside Remix)",
+   "title": "Billy Idol - Eyes Without a Face ｜ LIVE Performance ｜ The Spectrum ｜ SiriusXM",
+   "algorithm": 3
+  },
+  "tH2w6Oxx0kQ": {
+   "status": "ok",
+   "tidal": 1273648,
+   "offset": -0.543,
+   "scale": 0.997378,
+   "quality": "LOSSLESS",
+   "resid": 0.008,
+   "good": 12,
+   "of": 12,
+   "title": "Kansas - Dust in the Wind (Official Video)",
+   "tidalTitle": "Kansas - Dust in the Wind",
+   "algorithm": 3
   }
  }
 }
