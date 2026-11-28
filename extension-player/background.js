@@ -204,7 +204,7 @@ async function tidalMatchInner(msg) {
     const name = String(syncDoc.videos[msg.videoId]?.tidalTitle || '');
     const cut = name.indexOf(' - ');
     const track = { id: sync.tidal, title: cut > 0 ? name.slice(cut + 3) : name, artists: cut > 0 ? [name.slice(0, cut)] : [], seconds: null };
-    return { track, sync: { offset: sync.offset, scale: sync.scale, stamp: sync.stamp }, query: 'sync file',
+    return { track, sync: { offset: sync.offset, scale: sync.scale, stamp: sync.stamp, ...(sync.segments ? { segments: sync.segments } : {}) }, query: 'sync file',
              ...(pres === 'PREVIEW' ? { via: 'web' } : {}) };
   }
   const stale = hit && ((!hit.result?.track && !hit.result?.preview && (hit.rules ?? 1) < TIDAL_MATCH_RULES)

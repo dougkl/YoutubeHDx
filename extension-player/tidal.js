@@ -301,6 +301,19 @@ function yhdxSyncEntry(file, videoId) {
   const e = file.videos[videoId];
   if (!e || typeof e !== 'object') return null;
   if (e.status === 'keep-youtube') return { status: 'keep-youtube', reason: String(e.reason || '') };
+  if (e.status === 'segments') {
+    // A video edited differently from TIDAL's song: [from video s, offset or null (TIDAL has nothing there), scale].
+    const tidal = String(e.tidal ?? '');
+    const segs = Array.isArray(e.segments) ? e.segments.slice(0, 60) : [];
+    const ok = /^\d{1,15}$/.test(tidal) && segs.length > 0 && segs.every((x, i) => Array.isArray(x) && Number.isFinite(x[0]) && x[0] >= 0
+      && (i === 0 || x[0] > segs[i - 1][0]) && (x[1] === null || (Number.isFinite(x[1]) && Math.abs(x[1]) <= 600))
+      && Number(x[2]) > 0.9 && Number(x[2]) < 1.1) && segs.some((x) => x[1] !== null);
+    if (!ok) return null;
+    const segments = segs.map((x) => [Number(x[0]), x[1] === null ? null : Number(x[1]), Number(x[2])]);
+    let h = 5381;
+    for (const ch of JSON.stringify(segments)) h = ((h * 33) ^ ch.charCodeAt(0)) >>> 0;
+    return { status: 'ok', tidal, offset: 0, scale: 1, segments, stamp: `${tidal}:seg:${h.toString(36)}` };
+  }
   if (e.status !== 'ok') return null;
   const tidal = String(e.tidal ?? '');
   const offset = Number(e.offset);

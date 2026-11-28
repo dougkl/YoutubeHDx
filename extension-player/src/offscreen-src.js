@@ -105,6 +105,8 @@ async function tick() {
   Player.setVolumeLevel(Math.max(0, Math.min(1, k.volume ?? 1)));
 
   if (!k.playing || target < 0) {
+    // A part of the video TIDAL's song doesn't have (an intro, a scene): say so once, so the video's sound comes back.
+    if (k.playing && previewChecked && !c.gap) { c.gap = true; report('gap'); }
     if (state === 'PLAYING') Player.pause();
     c.pausedSince ??= Date.now();
     if (!k.playing && Date.now() - c.pausedSince > PARK_MS) park(c);
@@ -118,6 +120,7 @@ async function tick() {
     Player.play();
     return;
   }
+  if (c.gap) { c.gap = false; report('playing', {}); } // TIDAL's part again: back to TIDAL's sound
   if (!previewChecked) {
     previewChecked = true;
     const ctx = Player.getPlaybackContext();

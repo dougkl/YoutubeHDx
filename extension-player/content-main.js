@@ -430,8 +430,16 @@
     // The published sync file measured this video: its offset and speed, once per measurement (a nudge you make
     // after it stays until a newer measurement comes).
     if (!picked && data.track && data.sync && state.prefs && state.prefs.syncStamp !== data.sync.stamp) {
-      state.prefs.audioOffset = data.sync.offset;
-      state.prefs.audioScale = data.sync.scale;
+      if (Array.isArray(data.sync.segments)) {
+        // An edited video: where each part is in TIDAL's song. audioOffset is then your nudge on top (none yet).
+        state.prefs.audioSegments = data.sync.segments;
+        state.prefs.audioOffset = 0;
+        delete state.prefs.audioScale;
+      } else {
+        delete state.prefs.audioSegments;
+        state.prefs.audioOffset = data.sync.offset;
+        state.prefs.audioScale = data.sync.scale;
+      }
       state.prefs.syncStamp = data.sync.stamp;
       savePrefs();
     }
@@ -464,7 +472,7 @@
     const offset = Number(state.prefs?.audioOffset) || 0;
     audio.via = data.via === 'web' ? 'web' : null;
     window.postMessage({ __yhdx: 'tidal-audio', cmd: 'load', trackId: data.track.id, via: audio.via, title: p.getVideoData?.()?.title || '',
-                         at: Math.max(0, (Number(p.getCurrentTime?.()) || 0) * (Number(state.prefs?.audioScale) || 1) + offset) }, location.origin);
+                         at: atFor(Number(p.getCurrentTime?.()) || 0) }, location.origin);
     startAudioClock();
   }
 
@@ -596,8 +604,10 @@
     }
     const playing = Boolean(v && !v.paused && !v.seeking && !ad && (v.readyState ?? 4) >= 3);
     const volume = p.isMuted?.() ? 0 : (Number(p.getVolume?.() ?? 100) / 100);
-    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: Number(p.getCurrentTime?.()) || 0,
-                         playing, rate: Number(v?.playbackRate) || 1, offset: Number(state.prefs?.audioOffset) || 0, scale: Number(state.prefs?.audioScale) || 1,
+    const now = Number(p.getCurrentTime?.()) || 0;
+    const timing = audioTiming(now);
+    window.postMessage({ __yhdx: 'tidal-audio', cmd: 'clock', trackId: audio.track.id, videoTime: now,
+                         playing, rate: Number(v?.playbackRate) || 1, offset: timing.offset, scale: timing.scale,
                          volume, fullscreen: !!document.fullscreenElement, both: !!audio.listenBoth, sentAt: Date.now() }, location.origin);
   }
 
@@ -906,7 +916,7 @@
     }
     prefs.pickedTrack = { id: t.id, title: t.title, artist: t.artist, seconds: t.seconds };
     prefs.audioOffset = offset;
-    delete prefs.audioScale; delete prefs.syncStamp; // your own pick: no measured speed
+    delete prefs.audioScale; delete prefs.syncStamp; delete prefs.audioSegments; // your own pick: no measured speed
     if (prefs.audio === 'youtube') delete prefs.audio;
     savePrefs();
     toast(`TIDAL for this video: ${t.artist ? `${t.artist} – ` : ''}${t.title}${offset ? ` (${fmtOffset()})` : ''}`);
@@ -915,6 +925,19 @@
     audio.status = 'idle';
     requestAudio(p);
   }
+
+  // Where TIDAL should be for this video time: one offset and speed, or (an edited video) the part of TIDAL's song
+  // this point of the video is in. A part TIDAL doesn't have gives a target before 0: the video's sound meanwhile.
+  function audioTiming(t) {
+    const nudge = Number(state.prefs?.audioOffset) || 0;
+    const segs = state.prefs?.audioSegments;
+    if (!Array.isArray(segs) || !segs.length) return { offset: nudge, scale: Number(state.prefs?.audioScale) || 1 };
+    let s = segs[0];
+    for (const x of segs) if (x[0] <= t) s = x;
+    if (s[1] === null) return { offset: -1e6, scale: 1 };
+    return { offset: s[1] + nudge, scale: Number(s[2]) || 1 };
+  }
+  function atFor(t) { const k = audioTiming(t); return Math.max(0, t * k.scale + k.offset); }
 
   const NEAR_S = 10; // TIDAL versions this close are offered at once; up to 20 s after asking
   const mmss = (x) => { const v = Math.round(Number(x) || 0); return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`; };
@@ -925,7 +948,7 @@
     const prefs = (state.prefs ||= {});
     prefs.audio = 'tidal';
     prefs.audioOffset = offset;
-    delete prefs.audioScale; delete prefs.syncStamp;
+    delete prefs.audioScale; delete prefs.syncStamp; delete prefs.audioSegments;
     savePrefs();
     audio.requested = null;
     audio.status = 'idle';

@@ -163,3 +163,75 @@ describe('service worker: the sync file', () => {
     assert.equal(calls.filter((u) => u.includes('raw.githubusercontent.com')).length, 1);
   });
 });
+
+// ---------------------------------------------------------------- edited videos: parts ("segments")
+
+describe('the sync file: an edited video in parts', () => {
+  const SEGS = [[0, null, 1], [15.74, -6.391, 1.008351], [120, 14.5, 1]];
+  const file = { format: 1, videos: {
+    sisterChris: { status: 'segments', tidal: 615401, segments: SEGS },
+    badSegments: { status: 'segments', tidal: 1, segments: [[10, 1, 1], [5, 2, 1]] },   // not in order
+    allNull0001: { status: 'segments', tidal: 1, segments: [[0, null, 1]] },
+  } };
+  test('parts come through with a stamp that changes with them', () => {
+    const e = T.yhdxSyncEntry(file, 'sisterChris');
+    assert.equal(e.status, 'ok');
+    assert.equal(e.tidal, '615401');
+    assert.deepEqual(JSON.parse(JSON.stringify(e.segments)), SEGS);
+    const e2 = T.yhdxSyncEntry({ format: 1, videos: { x: { status: 'segments', tidal: 615401, segments: [[0, null, 1], [15.75, -6.391, 1.008351]] } } }, 'x');
+    assert.notEqual(e.stamp, e2.stamp);
+  });
+  test('parts out of order, or with nothing on TIDAL at all, are ignored', () => {
+    assert.equal(T.yhdxSyncEntry(file, 'badSegments'), null);
+    assert.equal(T.yhdxSyncEntry(file, 'allNull0001'), null);
+  });
+});
+
+describe('page: an edited video in parts', () => {
+  beforeEach(() => mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'] }));
+  afterEach(() => mock.timers.reset());
+  const SEG_SYNC = { offset: 0, scale: 1, stamp: '615401:seg:abc', segments: [[0, null, 1], [15.74, -6.391, 1.008351], [120, 14.5, 1]] };
+
+  test('each part of the video plays its place in TIDAL; a part TIDAL lacks keeps the video sound (target before 0)', () => {
+    const page = watch();
+    page.player.time = 42;
+    page.sendTidalMatch('vid1', TRACK, { sync: SEG_SYNC });
+    assert.ok(Math.abs(audioMsgs(page, 'load')[0].at - (42 * 1.008351 - 6.391)) < 1e-6);
+    assert.deepEqual(JSON.parse(JSON.stringify(page.savedPrefs.vid1.audioSegments)), SEG_SYNC.segments);
+    page.sendAudioStatus('loaded', { trackId: TRACK.id });
+    advance(500);
+    let k = audioMsgs(page, 'clock').at(-1);
+    assert.ok(Math.abs(k.offset - -6.391) < 1e-9 && Math.abs(k.scale - 1.008351) < 1e-9);
+    page.player.time = 130;
+    advance(500);
+    k = audioMsgs(page, 'clock').at(-1);
+    assert.equal(k.offset, 14.5);
+    page.player.time = 5;
+    advance(500);
+    k = audioMsgs(page, 'clock').at(-1);
+    assert.ok(k.videoTime * k.scale + k.offset < 0, 'before 0: TIDAL waits, the video sound plays');
+  });
+
+  test('your nudge moves every part', () => {
+    const page = watch({ audioSegments: SEG_SYNC.segments, audioOffset: 0.5, syncStamp: SEG_SYNC.stamp });
+    page.player.time = 130;
+    page.sendTidalMatch('vid1', TRACK, { sync: SEG_SYNC });
+    page.sendAudioStatus('loaded', { trackId: TRACK.id });
+    advance(500);
+    assert.equal(audioMsgs(page, 'clock').at(-1).offset, 15);
+  });
+});
+
+describe('bridge: parts', () => {
+  test('kept with the video, and handed to the page; broken ones dropped', async () => {
+    const local = {};
+    const segs = [[0, null, 1], [15.74, -6.391, 1.008351]];
+    const posted = await runBridge({}, { local, reply: (m) => (m.type === 'tidal-match' ? { track: { id: '1' }, sync: { offset: 0, scale: 1, stamp: 's', segments: segs } } : null) });
+    await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid1abcdefg', prefs: { audioSegments: segs, syncStamp: 's' } });
+    assert.deepEqual(JSON.parse(JSON.stringify(local['prefs:vid1abcdefg'].audioSegments)), segs);
+    await posted.receive({ __yhdx: 'prefs-save', videoId: 'vid2abcdefg', prefs: { audioSegments: [[5, 1, 1], [1, 1, 1]], syncStamp: 's' } });
+    assert.equal(local['prefs:vid2abcdefg'].audioSegments, undefined);
+    await posted.receive({ __yhdx: 'tidal-match-request', videoId: 'vid1', title: 'A - B', author: 'A', duration: 200 });
+    assert.deepEqual(JSON.parse(JSON.stringify(posted.find((m) => m.__yhdx === 'tidal-match').sync.segments)), segs);
+  });
+});

@@ -79,6 +79,8 @@
     const audioScale = Math.round((Number(p?.audioScale) || 1) * 1e6) / 1e6;
     if (audioScale !== 1 && audioScale > 0.9 && audioScale < 1.1) out.audioScale = audioScale;
     if (typeof p?.syncStamp === 'string' && p.syncStamp) out.syncStamp = p.syncStamp.slice(0, 80);
+    const audioSegments = segmentsOf(p?.audioSegments);
+    if (audioSegments) out.audioSegments = audioSegments;
     // The TIDAL song you chose yourself (in your TIDAL tab) for this video.
     const t = p?.pickedTrack;
     if (t && /^\d{1,15}$/.test(String(t.id))) {
@@ -113,7 +115,22 @@
   function syncOf(s) {
     const offset = Number(s?.offset), scale = Number(s?.scale);
     if (!s || !Number.isFinite(offset) || Math.abs(offset) > 600 || !(scale > 0.9 && scale < 1.1)) return null;
-    return { offset, scale, stamp: String(s.stamp || '').slice(0, 80) };
+    return { offset, scale, stamp: String(s.stamp || '').slice(0, 80), ...(segmentsOf(s.segments) ? { segments: segmentsOf(s.segments) } : {}) };
+  }
+
+  // [[from video s, offset or null, scale] ...] (a video edited differently from TIDAL's song), checked.
+  function segmentsOf(x) {
+    if (!Array.isArray(x) || !x.length || x.length > 60) return null;
+    const out = [];
+    for (const s of x) {
+      if (!Array.isArray(s)) return null;
+      const from = Number(s[0]), off = s[1] === null ? null : Number(s[1]), sc = Number(s[2]);
+      if (!Number.isFinite(from) || from < 0 || (out.length && from <= out.at(-1)[0])) return null;
+      if (off !== null && (!Number.isFinite(off) || Math.abs(off) > 600)) return null;
+      if (!(sc > 0.9 && sc < 1.1)) return null;
+      out.push([from, off, sc]);
+    }
+    return out;
   }
 
   const AUDIO_CMDS = new Set(['load', 'clock', 'stop']);

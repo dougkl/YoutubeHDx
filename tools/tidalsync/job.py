@@ -3,10 +3,10 @@ Results per worker: %TEMP%/tidalsync/w<worker>.json (resumable). merge -> sync/t
 import sys, os, re, json, glob, pathlib, datetime, time
 HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(HERE))
-from align import decode, align
+from align import decode, align, segments
 from match import parse, tidal_same_song, clean_channel, norm, sim
 
-ALGORITHM = 3   # 3: artist/song/album from the .nfo, any same-named TIDAL track (the audio decides); 2: exact frame rate
+ALGORITHM = 4   # 4: edited videos in parts (segments); 3: 3: artist/song/album from the .nfo, any same-named TIDAL track (the audio decides); 2: exact frame rate
 LIB = r"W:\Music (videos)"
 REPO = HERE.parent.parent
 OUT = pathlib.Path(os.environ["TEMP"]) / "tidalsync"; OUT.mkdir(exist_ok=True)
@@ -118,12 +118,21 @@ def measure(s, tidalapi, vid, title, path):
     best = None
     for t in cands:
         url = stream_url(t)
-        r = align(video, decode(url))
+        audio = decode(url)
+        r = align(video, audio)
         q = str(t.audio_quality).split(".")[-1]
         entry = {"tidal": t.id, "offset": r["offset"], "scale": r["scale"], "quality": q, "resid": r["resid"],
                  "good": r["good"], "of": len(r["windows"]), "title": title,
                  "tidalTitle": f"{t.artist.name} - {t.name}{' (' + t.version + ')' if t.version else ''}"}
         if r["status"] == "ok": return {"status": "ok", **entry}
+        # Edited differently from TIDAL's song: in parts, if most of the video lines up.
+        sg = segments(video, audio)
+        if sg:
+            ends = [x[0] for x in sg[1:]] + [secs]
+            covered = sum(e - x[0] for x, e in zip(sg, ends) if x[1] is not None)
+            if covered >= 0.6 * secs and len(sg) <= 12:
+                return {"status": "segments", "tidal": t.id, "segments": [list(x) for x in sg], "quality": q,
+                        "covered": round(covered / secs, 2), "title": title, "tidalTitle": entry["tidalTitle"]}
         if best is None or (r["status"] == "cuts" and best[0] != "cuts"): best = (r["status"], entry)
     st, e = best if best else ("nomatch", {"title": title})
     return {"status": "keep-youtube", "reason": st, **{k: e[k] for k in ("tidal", "tidalTitle", "title") if k in e}}
@@ -133,7 +142,7 @@ def cached_candidates(s, tidalapi, vid, title, path, secs):
     """Candidates from prepare (search only), else searched now."""
     f = OUT / "candidates.json"
     cache = json.load(open(f, encoding="utf-8")) if f.exists() else {}
-    if vid in cache and cache[vid].get("algorithm") == ALGORITHM:
+    if vid in cache and cache[vid].get("algorithm", 0) >= 3:
         return [s.track(i) for i in cache[vid]["ids"]]
     return candidates(s, tidalapi, song_info(title, path), secs)
 
@@ -146,7 +155,7 @@ def prepare():
     cache = json.load(open(f, encoding="utf-8")) if f.exists() else {}
     lib = library(); pos = {v: i for i, v in enumerate(playlist_order())}
     for n, (vid, (title, path)) in enumerate(sorted(lib.items(), key=lambda kv: pos.get(kv[0], 10 ** 6))):
-        if cache.get(vid, {}).get("algorithm") == ALGORITHM: continue
+        if cache.get(vid, {}).get("algorithm", 0) >= 3: continue
         try:
             secs = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
                                         capture_output=True, text=True).stdout.strip() or 0)
@@ -174,7 +183,8 @@ def work(wk, nw):
     items = sorted(lib.items(), key=lambda kv: (pos.get(kv[0], 10 ** 6), kv[1][0].lower()))[wk::nw]
     for i, (vid, (title, path)) in enumerate(items):
         old = done.get(vid)
-        if old and old.get("algorithm", 1) >= ALGORITHM: continue
+        # Done already: measured syncs from 3 on; anything else is tried again with the newest way.
+        if old and (old.get("algorithm", 1) >= ALGORITHM or (old.get("status") == "ok" and old.get("algorithm", 1) >= 3)): continue
         try: done[vid] = {**measure(s, tidalapi, vid, title, path), "algorithm": ALGORITHM}
         except Exception as e:
             if not isinstance(e, Busy) and not any(x in str(e) for x in ("429", "400 Client Error", "TooManyRequests")): raise
@@ -195,7 +205,7 @@ def merge():
     # Published: measured syncs, and "keep YouTube" only where a TIDAL track was really measured and didn't fit
     # (not when the search found nothing, or TIDAL couldn't be reached: the Player's own matching stays for those).
     vids = {k: v for k, v in sorted(allv.items())
-            if v.get("status") == "ok" or (v.get("status") == "keep-youtube" and "tidal" in v)}
+            if v.get("status") in ("ok", "segments") or (v.get("status") == "keep-youtube" and "tidal" in v)}
     doc = {"format": 1, "algorithm": ALGORITHM, "updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
            "videos": vids}
     (REPO / "sync").mkdir(exist_ok=True)

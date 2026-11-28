@@ -92,3 +92,92 @@ def align(video, tidal, windows=12, win_s=15.0, tol=0.08, floor=0.3):
     return {"offset": round(float(off), 3), "scale": round(float(scale), 6), "coarse": round(coarse, 2),
             "coarse_peak": round(peak, 3), "windows": out, "good": len(good),
             "resid": None if resid is None else round(resid, 3), "status": status}
+
+
+def _peaks(fa, ft, lo, hi):
+    """Normalised correlation of window fa at every TIDAL frame lo..hi: (frames, scores)."""
+    lo, hi = max(0, lo), min(len(ft) - len(fa), hi)
+    if hi < lo: return np.array([], int), np.array([])
+    b = ft[lo:hi + len(fa)]
+    c = correlate(b, fa, mode="valid", method="fft")
+    norms = np.sqrt(np.convolve(b ** 2, np.ones(len(fa)), mode="valid")) * np.sqrt((fa ** 2).sum()) + 1e-9
+    return np.arange(lo, lo + len(c)), c / norms
+
+
+def segments(video, tidal, step_s=5.0, win_s=10.0, tol=0.08, floor=0.3):
+    """For a video edited differently from TIDAL's track: where each part of the video is in TIDAL's song.
+    [(from_video_s, offset, scale) ...] in video order; offset None = TIDAL has nothing there (keep the video's own
+    sound). Follows the song window by window; only where it stops fitting is the whole song searched (the nearest
+    good spot wins, so a repeated chorus elsewhere doesn't). Cut points to ~0.25 s. None if nothing lines up."""
+    fv, ft = flux(video), flux(tidal)
+    W, S, near = int(win_s * FPS), int(step_s * FPS), int(1.0 * FPS)
+    starts = list(range(0, len(fv) - W, S))
+    def local(f0, off):                                   # (offset, score) near TIDAL = video + off
+        fa = fv[f0:f0 + W]
+        if fa.std() < 0.2: return None, 0.0
+        c0 = f0 + int(round(off * FPS))
+        fr, sc = _peaks(fa, ft, c0 - near, c0 + near)
+        if not len(sc): return None, 0.0
+        k = int(np.argmax(sc)); return (fr[k] - f0) / FPS, float(sc[k])
+    def anywhere(f0, prev):                               # best spots in the whole song, nearest to prev first
+        fa = fv[f0:f0 + W]
+        if fa.std() < 0.2: return None, 0.0
+        fr, sc = _peaks(fa, ft, 0, len(ft))
+        if not len(sc) or sc.max() < floor: return None, float(sc.max()) if len(sc) else 0.0
+        good = np.where(sc >= sc.max() - 0.05)[0]
+        offs = (fr[good] - f0) / FPS
+        k = int(np.argmin(np.abs(offs - prev))) if prev is not None else int(np.argmax(sc[good]))
+        return float(offs[k]), float(sc[good][k])
+    pts, cur, prev = [], None, None                       # pts: (t, offset or None)
+    for n, f0 in enumerate(starts):
+        o = None
+        if cur is not None:
+            o, p = local(f0, cur)
+            if p < floor: o = None
+        if o is None:
+            o2, p2 = anywhere(f0, prev)
+            # a new place only counts if the next window carries on there too (not a one-off look-alike)
+            if o2 is not None and n + 1 < len(starts):
+                o3, p3 = local(starts[n + 1], o2)
+                if p3 < floor: o2 = None
+            o = o2
+        pts.append((f0 / FPS, o))
+        if o is not None: cur, prev = o, o
+    # runs of the same offset (small drift = speed difference) and runs where nothing fits
+    runs = []
+    for t, o in pts:
+        r = runs[-1] if runs else None
+        if r and ((o is None) == (r["o"] is None)) and (o is None or abs(o - r["last"]) <= tol + 0.003 * step_s):
+            r["pts"].append((t, o)); r["last"] = o if o is not None else r["last"]
+        else:
+            runs.append({"o": o, "last": o, "pts": [(t, o)]})
+    # a lone window that fits nothing, inside a good part, is noise
+    runs = [r for r in runs if not (r["o"] is None and len(r["pts"]) < 2 and r is not runs[0] and r is not runs[-1])]
+    if not any(r["o"] is not None for r in runs): return None
+    out = []
+    for r in runs:
+        if r["o"] is None: seg = [r["pts"][0][0], None, 1.0]
+        else:
+            t = np.array([x[0] for x in r["pts"]]); o = np.array([x[1] for x in r["pts"]])
+            k, b = np.polyfit(t, o, 1) if len(t) >= 4 else (0.0, float(np.median(o)))
+            if abs(k) < 2e-4: k, b = 0.0, float(np.median(o))
+            seg = [float(t[0]), float(b), 1.0 + float(k)]
+        if out and ((seg[1] is None and out[-1][1] is None) or (seg[1] is not None and out[-1][1] is not None
+                    and abs((seg[0] * seg[2] + seg[1]) - (seg[0] * out[-1][2] + out[-1][1])) <= tol)): continue
+        out.append(seg)
+    def fits(t0, seg):
+        if seg[1] is None: return 0.0
+        f0 = int(t0 * FPS); fa = fv[f0:f0 + int(3 * FPS)]
+        c = int(round((t0 * seg[2] + seg[1]) * FPS))
+        if len(fa) < 10 or c < 0 or c + len(fa) > len(ft): return 0.0
+        fb = ft[c:c + len(fa)]
+        return float((fa * fb).sum() / (np.sqrt((fa ** 2).sum() * (fb ** 2).sum()) + 1e-9))
+    for i in range(1, len(out)):
+        a, b = out[i - 1], out[i]
+        best, score = b[0], -9
+        for t0 in np.arange(max(3.0, b[0] - step_s - win_s / 2), b[0] + win_s / 2, 0.25):
+            s_ = fits(t0 - 3, a) - fits(t0, a) + fits(t0, b) - fits(t0 - 3, b)
+            if s_ > score: best, score = float(t0), s_
+        b[0] = best
+    out[0][0] = 0.0
+    return [(round(f, 2), None if o is None else round(o, 3), round(sc, 6)) for f, o, sc in out]
