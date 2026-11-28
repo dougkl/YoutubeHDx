@@ -26,6 +26,23 @@ def library():
     return vids
 
 
+PLAYLISTS = ["PLKauv8SCR9wnu9Jr9kcqgKuEPdyHNuuxm", "PLKauv8SCR9wmYlZZRniIo-7QeY4oC5euy"]  # My MTV (Always updated), My MTV 2
+
+
+def playlist_order():
+    """Video ids of the My MTV playlists, top first (refreshed once a day)."""
+    f = OUT / "playlist-order.json"
+    if f.exists() and time.time() - f.stat().st_mtime < 86400: return json.load(open(f, encoding="utf-8"))
+    import subprocess
+    ids = []
+    for pl in PLAYLISTS:
+        out = subprocess.run(["yt-dlp", "--flat-playlist", "--print", "%(id)s", f"https://www.youtube.com/playlist?list={pl}"],
+                             capture_output=True, text=True).stdout.split()
+        ids += [i for i in out if i not in ids]
+    if ids: json.dump(ids, open(f, "w", encoding="utf-8"))
+    return ids or (json.load(open(f, encoding="utf-8")) if f.exists() else [])
+
+
 def candidates(s, tidalapi, title, secs):
     v = parse(title, "")
     if not v["artist"] or not v["track"]: return v, []
@@ -84,16 +101,17 @@ def work(wk, nw):
     f = OUT / f"w{wk}.json"
     done = json.load(open(f, encoding="utf-8")) if f.exists() else {}
     lib = library()
-    # Your most-collected artists first (the songs you play most), then the rest.
-    from collections import Counter
-    artist = lambda title: parse(title, "")["artist"]
-    count = Counter(artist(t) for t, _ in lib.values())
-    count[''] = -1  # titles without an 'Artist - Song' shape: last
-    items = sorted(lib.items(), key=lambda kv: (-count[artist(kv[1][0])], kv[1][0].lower()))[wk::nw]
+    # Top songs first: the order of your My MTV playlists (top of 'My MTV (Always updated)', then 'My MTV 2'),
+    # then any other library videos.
+    pos = {v: i for i, v in enumerate(playlist_order())}
+    items = sorted(lib.items(), key=lambda kv: (pos.get(kv[0], 10 ** 6), kv[1][0].lower()))[wk::nw]
     for i, (vid, (title, path)) in enumerate(items):
         old = done.get(vid)
         if old and (old.get("algorithm", 1) >= ALGORITHM or old.get("reason") == "not-on-tidal"): continue
         try: done[vid] = {**measure(s, tidalapi, vid, title, path), "algorithm": ALGORITHM}
+        except Exception as e:
+            if not isinstance(e, Busy) and not any(x in str(e) for x in ("429", "400 Client Error", "TooManyRequests")): raise
+            print(f"[{wk}] TIDAL is busy ({str(e)[:60]}): stopping here; the next run carries on", flush=True); break
         except Busy:
             print(f"[{wk}] TIDAL is busy: stopping here; the next run carries on", flush=True); break
         except Exception as e:
