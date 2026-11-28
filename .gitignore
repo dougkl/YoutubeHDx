@@ -21,3 +21,5 @@ downloader-config.json
 
 # made by build-pack (your TIDAL Client ID)
 extension-player/tidal-config.json
+
+__pycache__/

@@ -32,12 +32,12 @@ def candidates(s, tidalapi, title, secs):
     seen = {}
     for q in dict.fromkeys([f"{v['artist']} {v['track']}", f"{v['track']} {v['artist']}"]):
       for t in s.search(q, models=[tidalapi.Track], limit=25)["tracks"]:
-        if t.id in seen or abs(t.duration - secs) > 90: continue
+        if t.id in seen or abs(t.duration - secs) > 180: continue
         if tidal_same_song(v, [a.name for a in t.artists], t.name, t.version or ""): seen[t.id] = t
     if not seen and v["artist"] and v["track"]:  # "Song - Artist" titles: try the other way round
         r = {**v, "artist": v["track"], "track": v["artist"]}
         for t in s.search(f"{r['artist']} {r['track']}", models=[tidalapi.Track], limit=25)["tracks"]:
-            if abs(t.duration - secs) <= 90 and tidal_same_song(r, [a.name for a in t.artists], t.name, t.version or ""): seen[t.id] = t
+            if abs(t.duration - secs) <= 180 and tidal_same_song(r, [a.name for a in t.artists], t.name, t.version or ""): seen[t.id] = t
     return v, sorted(seen.values(), key=lambda t: (-RANK.get(str(t.audio_quality).split(".")[-1], 0), abs(t.duration - secs)))[:3]
 
 
