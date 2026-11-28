@@ -1,7 +1,7 @@
 {
  "format": 1,
- "algorithm": 4,
- "updated": "2026-11-28T05:33:44Z",
+ "algorithm": 5,
+ "updated": "2026-11-28T06:04:44Z",
  "videos": {
   "-0QBxwRhAmA": {
    "status": "ok",
@@ -356,12 +356,100 @@
    "algorithm": 1
   },
   "1V_xRb0x9aw": {
-   "status": "keep-youtube",
-   "reason": "cuts",
+   "status": "segments",
    "tidal": 72601920,
-   "tidalTitle": "Gorillaz - Clint Eastwood (Phi Life Cypher Version)",
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     3.0,
+     265.527,
+     1.0
+    ],
+    [
+     10.5,
+     264.818,
+     1.0
+    ],
+    [
+     17.49,
+     11.284,
+     1.0
+    ],
+    [
+     64.23,
+     12.003,
+     1.0
+    ],
+    [
+     73.98,
+     11.284,
+     1.0
+    ],
+    [
+     170.45,
+     11.993,
+     1.0
+    ],
+    [
+     184.7,
+     11.284,
+     1.0
+    ],
+    [
+     194.45,
+     10.566,
+     1.0
+    ],
+    [
+     197.45,
+     11.284,
+     1.0
+    ],
+    [
+     207.94,
+     10.551,
+     1.0
+    ],
+    [
+     210.94,
+     11.254,
+     1.0
+    ],
+    [
+     223.44,
+     45.527,
+     1.0
+    ],
+    [
+     224.44,
+     46.195,
+     1.0
+    ],
+    [
+     224.19,
+     46.554,
+     1.0
+    ],
+    [
+     232.19,
+     27.976,
+     1.0
+    ],
+    [
+     247.43,
+     27.268,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.99,
    "title": "Gorillaz - Clint Eastwood (Official Video)",
-   "algorithm": 4
+   "tidalTitle": "Gorillaz - Clint Eastwood (Phi Life Cypher Version)",
+   "algorithm": 5
   },
   "1cQh1ccqu8M": {
    "status": "ok",
@@ -503,7 +591,7 @@
    "tidal": 117837352,
    "tidalTitle": "Ramones - Blitzkrieg Bop (Live at Victoria Hall, Stoke-On-Trent, Staffordshire, 12/29/77)",
    "title": "Ramones - Blitzkrieg Bop (Official Music Video)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "27eClHQxXls": {
    "status": "ok",
@@ -644,12 +732,17 @@
    "algorithm": 1
   },
   "32bdevGClD4": {
-   "status": "keep-youtube",
-   "reason": "cuts",
-   "tidal": 2113700,
-   "tidalTitle": "Faith No More - Falling to Pieces",
+   "status": "ok",
+   "tidal": 45611512,
+   "offset": 1.401,
+   "scale": 0.998729,
+   "quality": "LOSSLESS",
+   "resid": 0.005,
+   "good": 12,
+   "of": 12,
    "title": "Faith No More - Falling to Pieces (Official Music Video)",
-   "algorithm": 1
+   "tidalTitle": "Faith No More - Bonus Tracks - Falling to Pieces (Matt Wallace Remix)",
+   "algorithm": 4
   },
   "32nlxQOe3tw": {
    "status": "ok",
@@ -1450,16 +1543,16 @@
   },
   "8fGLiIvKKys": {
    "status": "ok",
-   "tidal": 37438545,
-   "offset": -0.527,
-   "scale": 0.996686,
+   "tidal": 201350102,
+   "offset": -0.625,
+   "scale": 0.999624,
    "quality": "LOSSLESS",
-   "resid": 0.018,
+   "resid": 0.011,
    "good": 12,
    "of": 12,
    "title": "Roxette - Fading Like A Flower",
-   "tidalTitle": "Roxette - Fading Like A Flower (Every Time You Leave)",
-   "algorithm": 1
+   "tidalTitle": "Roxette - CD 01 - Fading Like a Flower (Every Time You Leave) [Humberto Gatica Mix]",
+   "algorithm": 4
   },
   "9AXd6zWo8R0": {
    "status": "ok",
@@ -2303,7 +2396,7 @@
    "tidal": 69778330,
    "tidalTitle": "Manfred Mann's Earth Band - Blinded By The Light",
    "title": "Blinded by The Light - Manfred Mann's Earth Band ｜ The Midnight Special",
-   "algorithm": 4
+   "algorithm": 5
   },
   "ECiMhe4E0pI": {
    "status": "ok",
@@ -2538,12 +2631,110 @@
    "algorithm": 4
   },
   "Hphwfq1wLJs": {
-   "status": "keep-youtube",
-   "reason": "cuts",
+   "status": "segments",
    "tidal": 268978550,
-   "tidalTitle": "N-Trance - Da Ya Think I'm Sexy?",
+   "segments": [
+    [
+     0.0,
+     197.735,
+     0.998769
+    ],
+    [
+     43.49,
+     197.142,
+     1.0
+    ],
+    [
+     54.74,
+     163.504,
+     0.998346
+    ],
+    [
+     77.48,
+     null,
+     1.0
+    ],
+    [
+     99.72,
+     102.188,
+     1.0
+    ],
+    [
+     104.72,
+     103.959,
+     0.992615
+    ],
+    [
+     129.96,
+     87.95,
+     1.0
+    ],
+    [
+     147.21,
+     -6.166,
+     1.0
+    ],
+    [
+     165.96,
+     -25.427,
+     1.0
+    ],
+    [
+     175.45,
+     null,
+     1.0
+    ],
+    [
+     188.45,
+     -44.399,
+     1.0
+    ],
+    [
+     194.7,
+     -43.94,
+     1.0
+    ],
+    [
+     203.95,
+     -37.624,
+     1.0
+    ],
+    [
+     210.44,
+     -68.664,
+     1.0
+    ],
+    [
+     219.69,
+     -68.774,
+     1.0
+    ],
+    [
+     224.69,
+     -67.776,
+     1.0
+    ],
+    [
+     246.18,
+     -83.705,
+     1.0
+    ],
+    [
+     259.18,
+     -84.663,
+     1.0
+    ],
+    [
+     266.68,
+     -85.655,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.87,
    "title": "Rod Stewart - Da Ya Think I'm Sexy？ (Official HD Remastered Video)",
-   "algorithm": 4
+   "tidalTitle": "N-Trance - Da Ya Think I'm Sexy?",
+   "algorithm": 5
   },
   "HtCte-99Sfo": {
    "status": "keep-youtube",
@@ -2551,7 +2742,7 @@
    "tidal": 1308020,
    "tidalTitle": "Redbone - Come and Get Your Love",
    "title": "Come And Get Your Love - Redbone ｜ The Midnight Special",
-   "algorithm": 4
+   "algorithm": 5
   },
   "I0AxrOUJ62E": {
    "status": "ok",
@@ -2564,6 +2755,72 @@
    "of": 12,
    "title": "Men At Work - It's a Mistake (Official Video)",
    "tidalTitle": "Men At Work - It's a Mistake",
+   "algorithm": 4
+  },
+  "ImKY6TZEyrI": {
+   "status": "segments",
+   "tidal": 307694335,
+   "segments": [
+    [
+     0.0,
+     67.517,
+     1.0
+    ],
+    [
+     11.75,
+     64.206,
+     0.990875
+    ],
+    [
+     56.49,
+     40.987,
+     1.0
+    ],
+    [
+     64.73,
+     40.872,
+     1.0
+    ],
+    [
+     71.98,
+     9.5,
+     0.993214
+    ],
+    [
+     91.23,
+     -87.93,
+     1.0
+    ],
+    [
+     101.47,
+     -101.969,
+     0.992216
+    ],
+    [
+     152.71,
+     -71.213,
+     1.0
+    ],
+    [
+     159.46,
+     -156.472,
+     0.991617
+    ],
+    [
+     184.95,
+     -181.727,
+     0.992993
+    ],
+    [
+     240.68,
+     null,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.92,
+   "title": "Mazzy Star - Fade Into You (Official Music Video)",
+   "tidalTitle": "Mazzy Star - Welcome To The 1990s - Fade Into You (Live)",
    "algorithm": 4
   },
   "J08ZwySCoJ8": {
@@ -2913,7 +3170,7 @@
    "tidal": 193335269,
    "tidalTitle": "STEREO DUB - Everybody Wants to Rule the World (Dataset Extended Mix)",
    "title": "Tears for Fears — Everybody Wants to Rule the World ｜ LIVE Performance ｜ SiriusXM",
-   "algorithm": 4
+   "algorithm": 5
   },
   "Q2FzZSBD5LE": {
    "status": "ok",
@@ -2999,7 +3256,7 @@
    "tidal": 395319,
    "tidalTitle": "Stevie Nicks - Edge of Seventeen (with the Melbourne Symphony) [Live 2006]",
    "title": "Stevie Nicks - Edge Of Seventeen (Live In Chicago)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "T4nzOb1HLVY": {
    "status": "keep-youtube",
@@ -3132,6 +3389,19 @@
    "tidal": 1190938,
    "tidalTitle": "George Harrison - While My Guitar Gently Weeps (Live In Japan, 1991 / 2004 Mix)",
    "title": "George Harrison & Ringo Starr - While My Guitar Gently Weeps (The Prince's Trust Rock Gala 1987)",
+   "algorithm": 5
+  },
+  "Yem_iEHiyJ0": {
+   "status": "ok",
+   "tidal": 86639810,
+   "offset": -9.682,
+   "scale": 0.996288,
+   "quality": "LOSSLESS",
+   "resid": 0.072,
+   "good": 12,
+   "of": 12,
+   "title": "Frankie Goes To Hollywood - Relax (Official Video)",
+   "tidalTitle": "Frankie Goes To Hollywood - Relax (Come Fighting)",
    "algorithm": 4
   },
   "YkADj0TPrJA": {
@@ -3342,7 +3612,7 @@
    "tidal": 415733073,
    "tidalTitle": "The Marshall Tucker Band - Can't You See",
    "title": "The Marshall Tucker Band - Can't You See (Live at Grand Opera House, 1973)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "ghhEPM3RWxc": {
    "status": "keep-youtube",
@@ -3350,7 +3620,7 @@
    "tidal": 1970835,
    "tidalTitle": "Spandau Ballet - True (Live from the N.E.C.)",
    "title": "Spandau Ballet - True (Live Aid 1985)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "god7hAPv8f0": {
    "status": "segments",
@@ -3394,7 +3664,7 @@
    "tidal": 112262391,
    "tidalTitle": "Suede - Beautiful Ones",
    "title": "Suede - Beautiful Ones ｜ Radio 2 in the Park 2025",
-   "algorithm": 4
+   "algorithm": 5
   },
   "i3MKTm-49uI": {
    "status": "ok",
@@ -3532,12 +3802,90 @@
    "algorithm": 4
   },
   "mcouO3YM-aA": {
-   "status": "keep-youtube",
-   "reason": "nomatch",
-   "tidal": 90320813,
-   "tidalTitle": "Whitney Houston - I Wanna Dance With Somebody (Junior's Happy Handbag Mix)",
+   "status": "segments",
+   "tidal": 266583935,
+   "segments": [
+    [
+     0.0,
+     0.459,
+     1.0
+    ],
+    [
+     10.5,
+     0.968,
+     1.0
+    ],
+    [
+     21.49,
+     null,
+     1.0
+    ],
+    [
+     34.99,
+     1.172,
+     1.0
+    ],
+    [
+     44.99,
+     null,
+     1.0
+    ],
+    [
+     71.98,
+     -0.499,
+     1.0
+    ],
+    [
+     84.73,
+     -79.12,
+     1.0
+    ],
+    [
+     92.73,
+     -79.594,
+     1.0
+    ],
+    [
+     103.47,
+     32.686,
+     1.0
+    ],
+    [
+     116.72,
+     31.977,
+     1.0
+    ],
+    [
+     124.47,
+     null,
+     1.0
+    ],
+    [
+     174.45,
+     54.855,
+     1.0
+    ],
+    [
+     171.7,
+     55.614,
+     1.0
+    ],
+    [
+     182.45,
+     null,
+     1.0
+    ],
+    [
+     222.19,
+     40.268,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.45,
    "title": "I Wanna Dance With Somebody - Whitney Houston - funk cover ft. Olivia Kuper Harris",
-   "algorithm": 4
+   "tidalTitle": "Whitney Houston - I Wanna Dance With Somebody (Who Loves Me)",
+   "algorithm": 5
   },
   "n0J6q42zLH0": {
    "status": "segments",
@@ -3610,12 +3958,115 @@
    "algorithm": 4
   },
   "o6xGqi5itxs": {
-   "status": "keep-youtube",
-   "reason": "cuts",
+   "status": "segments",
    "tidal": 6887847,
-   "tidalTitle": "Peter Frampton - Show Me The Way (Live)",
+   "segments": [
+    [
+     0.0,
+     5.161,
+     1.006061
+    ],
+    [
+     47.74,
+     -16.113,
+     1.0
+    ],
+    [
+     54.74,
+     -16.562,
+     1.0
+    ],
+    [
+     64.73,
+     -16.093,
+     1.0
+    ],
+    [
+     68.23,
+     -25.073,
+     1.0
+    ],
+    [
+     79.98,
+     5.33,
+     1.004895
+    ],
+    [
+     122.72,
+     115.524,
+     0.997206
+    ],
+    [
+     142.71,
+     87.91,
+     1.0
+    ],
+    [
+     148.46,
+     87.451,
+     1.0
+    ],
+    [
+     151.21,
+     67.756,
+     1.0
+    ],
+    [
+     159.46,
+     67.078,
+     1.0
+    ],
+    [
+     161.71,
+     66.439,
+     1.0
+    ],
+    [
+     171.45,
+     23.976,
+     1.0
+    ],
+    [
+     184.45,
+     23.846,
+     1.0
+    ],
+    [
+     193.7,
+     23.367,
+     1.0
+    ],
+    [
+     203.45,
+     23.856,
+     1.0
+    ],
+    [
+     210.69,
+     4.979,
+     1.002395
+    ],
+    [
+     233.69,
+     -118.371,
+     1.0
+    ],
+    [
+     248.68,
+     -119.319,
+     1.0
+    ],
+    [
+     254.18,
+     4.25,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
    "title": "Show Me The Way - Peter Frampton ｜ The Midnight Special",
-   "algorithm": 4
+   "tidalTitle": "Peter Frampton - Show Me The Way (Live)",
+   "algorithm": 5
   },
   "oA3-InoYsWQ": {
    "status": "ok",
@@ -3649,7 +4100,7 @@
    "tidal": 172592969,
    "tidalTitle": "Billy Idol - Eyes Without A Face (Poolside Remix)",
    "title": "Billy Idol - Eyes Without a Face ｜ LIVE Performance ｜ The Spectrum ｜ SiriusXM",
-   "algorithm": 4
+   "algorithm": 5
   },
   "pzS_eXQnW10": {
    "status": "keep-youtube",
@@ -3657,7 +4108,7 @@
    "tidal": 58990500,
    "tidalTitle": "Radiohead - High and Dry",
    "title": "High & Dry - Radiohead (Orchestral Cover) ft. Carrie Manolakos",
-   "algorithm": 4
+   "algorithm": 5
   },
   "qA1nGPM9yHA": {
    "status": "ok",
@@ -3833,7 +4284,7 @@
    "tidal": 373381125,
    "tidalTitle": "Eric Clapton - Layla (Live at Live Aid, John F. Kennedy Stadium, 13th July 1985)",
    "title": "Eric Clapton - Layla (The Prince's Trust Rock Gala 1988)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "tfp2O9ADwGk": {
    "status": "ok",
@@ -3862,7 +4313,7 @@
    "tidal": 93242280,
    "tidalTitle": "Neil Diamond - Sweet Caroline (Live At The Troubador/1970)",
    "title": "Neil Diamond - Sweet Caroline (Live At The Greek Theatre ⧸ 2012)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "uejh-bHa4To": {
    "status": "ok",
@@ -4045,7 +4496,7 @@
    "tidal": 1330757,
    "tidalTitle": "Divinyls - I Touch Myself",
    "title": "Divinyls - I Touch Myself (Official Music Video)",
-   "algorithm": 4
+   "algorithm": 5
   },
   "x_XS5q0EUQs": {
    "status": "ok",
