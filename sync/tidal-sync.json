@@ -1,7 +1,7 @@
 {
  "format": 1,
  "algorithm": 4,
- "updated": "2026-11-28T05:02:36Z",
+ "updated": "2026-11-28T05:33:44Z",
  "videos": {
   "-0QBxwRhAmA": {
    "status": "ok",
@@ -54,6 +54,19 @@
    "title": "Gnarls Barkley - Crazy (Official Video) [4K Remaster]",
    "tidalTitle": "Gnarls Barkley - Crazy",
    "algorithm": 1
+  },
+  "-OGd4gplxQM": {
+   "status": "ok",
+   "tidal": 534049733,
+   "offset": -1.114,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.01,
+   "good": 10,
+   "of": 12,
+   "title": "Queen - One Vision (Extended) 1985 [Official Video]",
+   "tidalTitle": "Queen - One Vision",
+   "algorithm": 4
   },
   "-VCqAjYO3NM": {
    "status": "ok",
@@ -306,15 +319,15 @@
   "1RHBAd5YUR8": {
    "status": "ok",
    "tidal": 82528996,
-   "offset": -6.028,
-   "scale": 1.001289,
+   "offset": -6.008,
+   "scale": 1.001282,
    "quality": "LOSSLESS",
-   "resid": 0.009,
+   "resid": 0.011,
    "good": 12,
    "of": 12,
    "title": "The Communards - Don't Leave Me This Way (with Sarah Jane Morris) [Official Video]",
    "tidalTitle": "The Communards - Don't Leave Me This Way (with Sarah Jane Morris)",
-   "algorithm": 1
+   "algorithm": 4
   },
   "1RKqOmSkGgM": {
    "status": "ok",
@@ -344,11 +357,11 @@
   },
   "1V_xRb0x9aw": {
    "status": "keep-youtube",
-   "reason": "nomatch",
-   "tidal": 34443724,
-   "tidalTitle": "Gorillaz - Clint Eastwood",
+   "reason": "cuts",
+   "tidal": 72601920,
+   "tidalTitle": "Gorillaz - Clint Eastwood (Phi Life Cypher Version)",
    "title": "Gorillaz - Clint Eastwood (Official Video)",
-   "algorithm": 1
+   "algorithm": 4
   },
   "1cQh1ccqu8M": {
    "status": "ok",
@@ -429,12 +442,60 @@
    "algorithm": 1
   },
   "1w7OgIMMRc4": {
-   "status": "keep-youtube",
-   "reason": "cuts",
+   "status": "segments",
    "tidal": 91059922,
-   "tidalTitle": "Guns N' Roses - Sweet Child O' Mine",
+   "segments": [
+    [
+     0.0,
+     0.1,
+     1.0
+    ],
+    [
+     3.0,
+     -0.369,
+     1.0
+    ],
+    [
+     30.24,
+     14.966,
+     1.0
+    ],
+    [
+     138.71,
+     13.978,
+     1.0
+    ],
+    [
+     150.96,
+     14.931,
+     1.0
+    ],
+    [
+     159.21,
+     13.988,
+     1.0
+    ],
+    [
+     168.71,
+     14.891,
+     1.0
+    ],
+    [
+     179.7,
+     61.291,
+     1.0
+    ],
+    [
+     293.67,
+     null,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.97,
    "title": "Guns N' Roses - Sweet Child O' Mine (Official Music Video)",
-   "algorithm": 1
+   "tidalTitle": "Guns N' Roses - Sweet Child O' Mine",
+   "algorithm": 4
   },
   "268C3N2dDYk": {
    "status": "keep-youtube",
@@ -447,15 +508,15 @@
   "27eClHQxXls": {
    "status": "ok",
    "tidal": 37438548,
-   "offset": 0.038,
+   "offset": 0.042,
    "scale": 1.0,
    "quality": "LOSSLESS",
-   "resid": 0.02,
+   "resid": 0.016,
    "good": 12,
    "of": 12,
    "title": "Roxette - Queen Of Rain [Official Music Video]",
    "tidalTitle": "Roxette - Queen of Rain",
-   "algorithm": 1
+   "algorithm": 4
   },
   "2H5uWRjFsGc": {
    "status": "ok",
@@ -512,10 +573,10 @@
   "2lvs2FzF64o": {
    "status": "keep-youtube",
    "reason": "cuts",
-   "tidal": 10280086,
-   "tidalTitle": "Dio - Holy Diver",
+   "tidal": 486406623,
+   "tidalTitle": "Dio - Holy Diver (Live at Donington '83)",
    "title": "Dio - Holy Diver (Official Music Video) [HD]",
-   "algorithm": 1
+   "algorithm": 4
   },
   "2sky1tt8vLA": {
    "status": "ok",
@@ -546,15 +607,15 @@
   "2u6uXuT9pm4": {
    "status": "ok",
    "tidal": 3392951,
-   "offset": 0.075,
+   "offset": 0.079,
    "scale": 1.0,
    "quality": "LOSSLESS",
-   "resid": 0.023,
+   "resid": 0.019,
    "good": 12,
    "of": 12,
    "title": "Cheap Trick - The Flame (Official Video)",
    "tidalTitle": "Cheap Trick - The Flame (Single Edit)",
-   "algorithm": 1
+   "algorithm": 4
   },
   "2vjPBrBU-TM": {
    "status": "ok",
@@ -823,15 +884,15 @@
   "4zAThXFOy2c": {
    "status": "ok",
    "tidal": 44832786,
-   "offset": -0.005,
+   "offset": -0.001,
    "scale": 1.0,
    "quality": "LOSSLESS",
-   "resid": 0.005,
+   "resid": 0.0,
    "good": 12,
    "of": 12,
    "title": "Chris Stapleton - Tennessee Whiskey (Official Audio)",
    "tidalTitle": "Chris Stapleton - Tennessee Whiskey",
-   "algorithm": 1
+   "algorithm": 4
   },
   "59NoqP02ZYM": {
    "status": "ok",
@@ -875,23 +936,28 @@
   "5Nd7EZ3k39s": {
    "status": "ok",
    "tidal": 111695494,
-   "offset": -3.08,
+   "offset": -3.069,
    "scale": 1.0,
    "quality": "LOSSLESS",
-   "resid": 0.005,
+   "resid": 0.0,
    "good": 12,
    "of": 12,
    "title": "Eric Johnson - Cliffs Of Dover - Live",
    "tidalTitle": "Eric Johnson - Cliffs of Dover (Live)",
-   "algorithm": 1
+   "algorithm": 4
   },
   "5anLPw0Efmo": {
-   "status": "keep-youtube",
-   "reason": "cuts",
-   "tidal": 492812954,
-   "tidalTitle": "Evanescence - My Immortal",
+   "status": "ok",
+   "tidal": 31849205,
+   "offset": 0.019,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.003,
+   "good": 12,
+   "of": 12,
    "title": "Evanescence - My Immortal (Official HD Music Video)",
-   "algorithm": 1
+   "tidalTitle": "Evanescence - My Immortal (Band Version)",
+   "algorithm": 4
   },
   "5r8JVPX3CI4": {
    "status": "keep-youtube",
@@ -995,17 +1061,45 @@
    "algorithm": 4
   },
   "69fPof-ZTnU": {
-   "status": "ok",
-   "tidal": 252920990,
-   "offset": -5.412,
-   "scale": 0.995794,
-   "quality": "LOW",
-   "resid": 0.014,
-   "good": 12,
-   "of": 12,
+   "status": "segments",
+   "tidal": 5962796,
+   "segments": [
+    [
+     0.0,
+     1.017,
+     0.998802
+    ],
+    [
+     24.74,
+     1.666,
+     1.0
+    ],
+    [
+     17.99,
+     1.193,
+     0.992216
+    ],
+    [
+     39.74,
+     0.229,
+     1.0
+    ],
+    [
+     49.74,
+     -0.259,
+     0.996783
+    ],
+    [
+     214.44,
+     -7.513,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
    "title": "Billy Squier - The Stroke",
    "tidalTitle": "Billy Squier - The Stroke",
-   "algorithm": 1
+   "algorithm": 4
   },
   "6Cs3Pvmmv0E": {
    "status": "ok",
@@ -1242,6 +1336,19 @@
    "tidalTitle": "Men At Work - Be Good Johnny",
    "algorithm": 1
   },
+  "7A8NgPVizP4": {
+   "status": "ok",
+   "tidal": 373381061,
+   "offset": -9.379,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Phil Collins - Against All Odds (Live Aid 1985)",
+   "tidalTitle": "Phil Collins - Against All Odds (Take a Look at Me Now) [Live at Live Aid, Wembley Stadium, 13th July 1985]",
+   "algorithm": 4
+  },
   "7QU1nvuxaMA": {
    "status": "ok",
    "tidal": 1788211,
@@ -1323,15 +1430,15 @@
   "8SbUC-UaAxE": {
    "status": "ok",
    "tidal": 629061,
-   "offset": -15.271,
-   "scale": 0.998018,
+   "offset": -15.233,
+   "scale": 0.998021,
    "quality": "LOSSLESS",
-   "resid": 0.014,
+   "resid": 0.009,
    "good": 12,
    "of": 12,
    "title": "Guns N' Roses - November Rain",
    "tidalTitle": "Guns N' Roses - November Rain",
-   "algorithm": 1
+   "algorithm": 4
   },
   "8TToLgW7zuc": {
    "status": "keep-youtube",
@@ -1591,6 +1698,14 @@
    "tidalTitle": "Dire Straits - Your Latest Trick (Live 1992)",
    "algorithm": 4
   },
+  "AL-nv-7TIws": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 77661295,
+   "tidalTitle": "Amy Winehouse - Back To Black",
+   "title": "Amy Winehouse - Back To Black (Live at Other Voices, 2006)",
+   "algorithm": 4
+  },
   "AOrqif_m3xc": {
    "status": "ok",
    "tidal": 38984797,
@@ -1659,15 +1774,15 @@
   "Ab1nJg4RKw0": {
    "status": "ok",
    "tidal": 144349004,
-   "offset": 0.127,
-   "scale": 0.999211,
+   "offset": 0.132,
+   "scale": 0.999207,
    "quality": "LOSSLESS",
-   "resid": 0.02,
+   "resid": 0.019,
    "good": 12,
    "of": 12,
    "title": "Oasis - Don't Go Away",
    "tidalTitle": "Oasis - Don't Go Away",
-   "algorithm": 1
+   "algorithm": 4
   },
   "Ae829mFAGGE": {
    "status": "ok",
@@ -1771,15 +1886,15 @@
   "BYyRLTveFJQ": {
    "status": "ok",
    "tidal": 19511771,
-   "offset": -1.082,
-   "scale": 0.999376,
+   "offset": -1.076,
+   "scale": 0.999379,
    "quality": "LOSSLESS",
-   "resid": 0.007,
+   "resid": 0.002,
    "good": 12,
    "of": 12,
    "title": "The Black Crowes - Remedy",
    "tidalTitle": "The Black Crowes - Remedy",
-   "algorithm": 1
+   "algorithm": 4
   },
   "BgQg3J7xU1k": {
    "status": "keep-youtube",
@@ -1836,6 +1951,19 @@
    "tidalTitle": "The J. Geils Band - Centerfold",
    "algorithm": 1
   },
+  "BsJisD7n8_Q": {
+   "status": "ok",
+   "tidal": 1240137,
+   "offset": -3.203,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Joe Satriani - Always with Me, Always with You (from Satriani LIVE!)",
+   "tidalTitle": "Joe Satriani - Always with Me, Always with You (Live at The Grove, Anaheim, CA - May 2006)",
+   "algorithm": 4
+  },
   "Bz61YQWZuYU": {
    "status": "keep-youtube",
    "reason": "cuts",
@@ -1891,6 +2019,19 @@
    "title": "Stories - Brother Louie (Audio)",
    "algorithm": 1
   },
+  "CBTOGVb_cQg": {
+   "status": "ok",
+   "tidal": 574517,
+   "offset": 0.017,
+   "scale": 0.998775,
+   "quality": "LOSSLESS",
+   "resid": 0.004,
+   "good": 12,
+   "of": 12,
+   "title": "Aerosmith - Angel (Official Music Video)",
+   "tidalTitle": "Aerosmith - Angel",
+   "algorithm": 4
+  },
   "CCHdMIEGaaM": {
    "status": "ok",
    "tidal": 19823990,
@@ -1926,12 +2067,60 @@
    "algorithm": 1
   },
   "CSnuQcFgvDo": {
-   "status": "keep-youtube",
-   "reason": "cuts",
+   "status": "segments",
    "tidal": 316182841,
-   "tidalTitle": "Aerosmith - What It Takes",
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     16.0,
+     283.965,
+     1.0
+    ],
+    [
+     19.49,
+     283.087,
+     1.0
+    ],
+    [
+     29.24,
+     -28.86,
+     0.998798
+    ],
+    [
+     270.43,
+     21.351,
+     1.0
+    ],
+    [
+     288.67,
+     -59.046,
+     1.0
+    ],
+    [
+     286.92,
+     -59.924,
+     1.0
+    ],
+    [
+     294.42,
+     -31.578,
+     1.0
+    ],
+    [
+     304.67,
+     -31.698,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.95,
    "title": "Aerosmith - What It Takes",
-   "algorithm": 1
+   "tidalTitle": "Aerosmith - What It Takes",
+   "algorithm": 4
   },
   "CU3mc0yvRNk": {
    "status": "ok",
@@ -2019,6 +2208,19 @@
    "tidalTitle": "Tears For Fears - Head Over Heels",
    "algorithm": 1
   },
+  "CtDurWIauoE": {
+   "status": "ok",
+   "tidal": 493551217,
+   "offset": -0.474,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Scorpions & Vanessa-Mae - Still Loving You (Taratata, 28 Apr 1996)",
+   "tidalTitle": "Scorpions - Still Loving You (Live at Taratata, April 28th 1996)",
+   "algorithm": 4
+  },
   "D-NvQ6VJYtE": {
    "status": "keep-youtube",
    "reason": "cuts",
@@ -2034,6 +2236,19 @@
    "tidalTitle": "Daryl Hall & John Oates - Out of Touch",
    "title": "Daryl Hall & John Oates - Out Of Touch (Official HD Video)",
    "algorithm": 1
+  },
+  "D3a8Seh3Cp4": {
+   "status": "ok",
+   "tidal": 69763622,
+   "offset": -0.865,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Roy Orbison - Oh, Pretty Woman (Black & White Night 30)",
+   "tidalTitle": "Roy Orbison - Oh, Pretty Woman (Live)",
+   "algorithm": 4
   },
   "D4dHr8evt6k": {
    "status": "keep-youtube",
@@ -2104,12 +2319,17 @@
    "algorithm": 1
   },
   "EUsbpmQ9-mc": {
-   "status": "keep-youtube",
-   "reason": "nomatch",
-   "tidal": 184101128,
-   "tidalTitle": "La Roux - Bulletproof",
+   "status": "ok",
+   "tidal": 3006321,
+   "offset": -0.767,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
    "title": "La Roux - Bulletproof (Official Video)",
-   "algorithm": 1
+   "tidalTitle": "La Roux - Bulletproof",
+   "algorithm": 4
   },
   "Ek0SgwWmF9w": {
    "status": "ok",
@@ -2171,6 +2391,19 @@
    "title": "Five - Keep on Movin' (Official Video)",
    "algorithm": 1
   },
+  "FpOEN93LX-E": {
+   "status": "ok",
+   "tidal": 186888,
+   "offset": -0.035,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Laura Pausini - La Solitudine (Official Video)",
+   "tidalTitle": "Laura Pausini - La solitudine",
+   "algorithm": 4
+  },
   "FrLequ6dUdM": {
    "status": "ok",
    "tidal": 258400243,
@@ -2183,6 +2416,19 @@
    "title": "TLC - No Scrubs (Official HD Video)",
    "tidalTitle": "TLC - No Scrubs (TLC Version)",
    "algorithm": 1
+  },
+  "GG5u_8TAHeY": {
+   "status": "ok",
+   "tidal": 33346007,
+   "offset": -2.752,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.006,
+   "good": 12,
+   "of": 12,
+   "title": "Swirl 360 - Hey Now Now",
+   "tidalTitle": "Swirl 360 - Hey Now Now",
+   "algorithm": 4
   },
   "GOJk0HW_hJw": {
    "status": "ok",
@@ -2204,6 +2450,40 @@
    "tidalTitle": "The Who - Baba O'Riley",
    "title": "The Who - Baba O'Riley",
    "algorithm": 1
+  },
+  "G_UXvcr22rM": {
+   "status": "ok",
+   "tidal": 237980679,
+   "offset": -2.527,
+   "scale": 1.000434,
+   "quality": "LOSSLESS",
+   "resid": 0.041,
+   "good": 10,
+   "of": 12,
+   "title": "Charles & Eddie - Would I Lie To You？",
+   "tidalTitle": "Charles & Eddie - Would I Lie To You? (Album Edit)",
+   "algorithm": 4
+  },
+  "Gg9cNGHl-bg": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 68649662,
+   "tidalTitle": "ZZ Top - La Grange (Live from Dallas)",
+   "title": "ZZ Top - La Grange (Live From Gruene Hall) ｜ Stages",
+   "algorithm": 4
+  },
+  "Gmrh42foUsg": {
+   "status": "ok",
+   "tidal": 492949986,
+   "offset": -34.88,
+   "scale": 0.996075,
+   "quality": "LOSSLESS",
+   "resid": 0.013,
+   "good": 12,
+   "of": 12,
+   "title": "Mötley Crüe - Home Sweet Home (Official Music Video)",
+   "tidalTitle": "Mötley Crüe - Home Sweet Home",
+   "algorithm": 4
   },
   "Gs069dndIYk": {
    "status": "segments",
@@ -2231,12 +2511,59 @@
    "tidalTitle": "Earth, Wind & Fire - September",
    "algorithm": 4
   },
+  "HQt6jIKNwgU": {
+   "status": "ok",
+   "tidal": 33752760,
+   "offset": 0.21,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Savage Garden - I Want You (Official Video)",
+   "tidalTitle": "Savage Garden - I Want You",
+   "algorithm": 4
+  },
+  "HTzGMEfbnAw": {
+   "status": "ok",
+   "tidal": 1326343,
+   "offset": 1.068,
+   "scale": 0.996818,
+   "quality": "LOSSLESS",
+   "resid": 0.011,
+   "good": 12,
+   "of": 12,
+   "title": "Juice Newton - Angel Of The Morning (Official Music Video)",
+   "tidalTitle": "Juice Newton - Angel Of The Morning",
+   "algorithm": 4
+  },
   "Hphwfq1wLJs": {
    "status": "keep-youtube",
    "reason": "cuts",
    "tidal": 268978550,
    "tidalTitle": "N-Trance - Da Ya Think I'm Sexy?",
    "title": "Rod Stewart - Da Ya Think I'm Sexy？ (Official HD Remastered Video)",
+   "algorithm": 4
+  },
+  "HtCte-99Sfo": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 1308020,
+   "tidalTitle": "Redbone - Come and Get Your Love",
+   "title": "Come And Get Your Love - Redbone ｜ The Midnight Special",
+   "algorithm": 4
+  },
+  "I0AxrOUJ62E": {
+   "status": "ok",
+   "tidal": 542168,
+   "offset": -0.135,
+   "scale": 0.995874,
+   "quality": "LOSSLESS",
+   "resid": 0.013,
+   "good": 12,
+   "of": 12,
+   "title": "Men At Work - It's a Mistake (Official Video)",
+   "tidalTitle": "Men At Work - It's a Mistake",
    "algorithm": 4
   },
   "J08ZwySCoJ8": {
@@ -2250,6 +2577,57 @@
    "of": 12,
    "title": "Huey Lewis & The News - Stuck With You",
    "tidalTitle": "Huey Lewis & The News - Stuck With You",
+   "algorithm": 4
+  },
+  "JLMcQ8W9_CU": {
+   "status": "segments",
+   "tidal": 108236127,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     14.25,
+     103.116,
+     1.0
+    ],
+    [
+     79.98,
+     103.016,
+     1.0
+    ],
+    [
+     92.98,
+     -18.378,
+     1.0
+    ],
+    [
+     97.97,
+     -18.718,
+     0.995004
+    ],
+    [
+     137.96,
+     null,
+     1.0
+    ],
+    [
+     164.71,
+     -18.787,
+     0.996388
+    ],
+    [
+     203.69,
+     -3.322,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.81,
+   "title": "01 Trouble Is A Friend - Lenka live at New Pop Festival",
+   "tidalTitle": "Lenka - Trouble Is a Friend (Mike Dextro and Proper Villains Remix)",
    "algorithm": 4
   },
   "K6qj09OHvjw": {
@@ -2324,6 +2702,148 @@
    "tidalTitle": "Rod Stewart - Maggie May",
    "algorithm": 4
   },
+  "Kcm3dbuV8Z4": {
+   "status": "segments",
+   "tidal": 366767422,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     4.25,
+     -3.285,
+     0.994933
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.98,
+   "title": "Lindsey Buckingham - Trouble (Official Music Video) [HD Remaster]",
+   "tidalTitle": "Lindsey Buckingham - Law And Order - Trouble (2024 Remaster)",
+   "algorithm": 4
+  },
+  "Kwdweif1YI0": {
+   "status": "ok",
+   "tidal": 3268240,
+   "offset": 0.056,
+   "scale": 0.999014,
+   "quality": "LOSSLESS",
+   "resid": 0.003,
+   "good": 12,
+   "of": 12,
+   "title": "Seal - Kiss From A Rose [Seal Version] (Official Video) [HD]",
+   "tidalTitle": "Seal - Kiss from a Rose",
+   "algorithm": 4
+  },
+  "MHRabky4Ajc": {
+   "status": "segments",
+   "tidal": 20907859,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     20.99,
+     -18.149,
+     1.0
+    ],
+    [
+     38.99,
+     -17.107,
+     0.998419
+    ],
+    [
+     139.46,
+     -16.832,
+     1.0
+    ],
+    [
+     149.71,
+     -17.091,
+     1.0
+    ],
+    [
+     158.71,
+     -17.61,
+     1.0
+    ],
+    [
+     156.96,
+     -17.116,
+     1.0
+    ],
+    [
+     160.7,
+     -17.63,
+     1.0
+    ],
+    [
+     173.2,
+     -17.39,
+     1.0
+    ],
+    [
+     182.95,
+     -16.398,
+     1.0
+    ],
+    [
+     190.45,
+     -14.986,
+     0.997804
+    ],
+    [
+     269.68,
+     null,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.86,
+   "title": "Depeche Mode - Strangelove (Official Video)",
+   "tidalTitle": "Depeche Mode - Strangelove (Live at Rose Bowl, Pasadena, CA - June 18, 1988)",
+   "algorithm": 4
+  },
+  "MM8iE_acHRs": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 35684787,
+   "tidalTitle": "UB40 - Can't Help Falling In Love (With You) (Live)",
+   "title": "UB40 - Cant Help Falling In Love (Performance Version)",
+   "algorithm": 4
+  },
+  "MQNRKX8GwPo": {
+   "status": "segments",
+   "tidal": 77652610,
+   "segments": [
+    [
+     0.0,
+     -0.269,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Lynyrd Skynyrd - Free Bird",
+   "tidalTitle": "Lynyrd Skynyrd - Free Bird",
+   "algorithm": 4
+  },
+  "MXx9S2nDouY": {
+   "status": "ok",
+   "tidal": 89413083,
+   "offset": -0.422,
+   "scale": 0.997885,
+   "quality": "LOSSLESS",
+   "resid": 0.002,
+   "good": 12,
+   "of": 12,
+   "title": "Guns N' Roses - You Could Be Mine (Official Video HD)",
+   "tidalTitle": "Guns N' Roses - You Could Be Mine",
+   "algorithm": 4
+  },
   "NrLkTZrPZA4": {
    "status": "segments",
    "tidal": 334676,
@@ -2340,6 +2860,19 @@
    "tidalTitle": "Elton John - Sacrifice",
    "algorithm": 4
   },
+  "O-fyNgHdmLI": {
+   "status": "ok",
+   "tidal": 31849370,
+   "offset": 0.075,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Creed - My Sacrifice (Official HD Music Video)",
+   "tidalTitle": "Creed - My Sacrifice",
+   "algorithm": 4
+  },
   "Odcn6qk94bs": {
    "status": "ok",
    "tidal": 105048158,
@@ -2353,12 +2886,59 @@
    "tidalTitle": "Eagles - I Can't Tell You Why (Live On MTV, 1994)",
    "algorithm": 3
   },
+  "Om_VWBua0_M": {
+   "status": "ok",
+   "tidal": 3663951,
+   "offset": -14.533,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Foxy Shazam - Oh Lord (Official Music Video)",
+   "tidalTitle": "Foxy Shazam - Oh Lord",
+   "algorithm": 4
+  },
+  "OnJqFrVD3uE": {
+   "status": "keep-youtube",
+   "reason": "nomatch",
+   "tidal": 1308020,
+   "tidalTitle": "Redbone - Come and Get Your Love",
+   "title": "Redbone - Come And Get Your Love (Live on The Midnight Special) HQ",
+   "algorithm": 4
+  },
   "Pkgd3tER1yI": {
    "status": "keep-youtube",
    "reason": "nomatch",
    "tidal": 193335269,
    "tidalTitle": "STEREO DUB - Everybody Wants to Rule the World (Dataset Extended Mix)",
    "title": "Tears for Fears — Everybody Wants to Rule the World ｜ LIVE Performance ｜ SiriusXM",
+   "algorithm": 4
+  },
+  "Q2FzZSBD5LE": {
+   "status": "ok",
+   "tidal": 351747510,
+   "offset": -6.771,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Deep Purple - Smoke On the Water (Official Music Video)",
+   "tidalTitle": "Deep Purple - Smoke on the Water (2024 Remix)",
+   "algorithm": 4
+  },
+  "QtTR-_Klcq8": {
+   "status": "ok",
+   "tidal": 67367328,
+   "offset": -3.304,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "The Offspring - Pretty Fly (For A White Guy) (Official Music Video)",
+   "tidalTitle": "The Offspring - Pretty Fly (For A White Guy)",
    "algorithm": 4
   },
   "R-BT2yzXP8w": {
@@ -2400,12 +2980,85 @@
    "tidalTitle": "Christina Aguilera - Lady Marmalade (From \"Moulin Rouge\" Soundtrack)",
    "algorithm": 3
   },
+  "RcZn2-bGXqQ": {
+   "status": "ok",
+   "tidal": 3043602,
+   "offset": -4.936,
+   "scale": 0.99595,
+   "quality": "LOSSLESS",
+   "resid": 0.009,
+   "good": 12,
+   "of": 12,
+   "title": "The Rolling Stones - Angie - OFFICIAL PROMO (Version 1)",
+   "tidalTitle": "The Rolling Stones - Angie (Remastered 2009)",
+   "algorithm": 4
+  },
   "S3DhXcQepbY": {
    "status": "keep-youtube",
    "reason": "cuts",
    "tidal": 395319,
    "tidalTitle": "Stevie Nicks - Edge of Seventeen (with the Melbourne Symphony) [Live 2006]",
    "title": "Stevie Nicks - Edge Of Seventeen (Live In Chicago)",
+   "algorithm": 4
+  },
+  "T4nzOb1HLVY": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 485729072,
+   "tidalTitle": "Whitesnake - Here I Go Again (Live At The Apollo Theatre, Glasgow, England / March 1st, 1984 / 2018 Remaster)",
+   "title": "Whitesnake - Here I Go Again - Greatest Hits 2022",
+   "algorithm": 4
+  },
+  "TingYha7t7Y": {
+   "status": "ok",
+   "tidal": 331067929,
+   "offset": -0.706,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.002,
+   "good": 12,
+   "of": 12,
+   "title": "Inner Circle - Games People Play (Official Video HD)(Audio HD)",
+   "tidalTitle": "Inner Circle - Games People Play",
+   "algorithm": 4
+  },
+  "TjPhzgxe3L0": {
+   "status": "ok",
+   "tidal": 7932950,
+   "offset": -0.252,
+   "scale": 1.003786,
+   "quality": "LOSSLESS",
+   "resid": 0.02,
+   "good": 12,
+   "of": 12,
+   "title": "The Smiths - Heaven Knows I'm Miserable Now (Official Music Video)",
+   "tidalTitle": "The Smiths - Heaven Knows I'm Miserable Now (2011 Remaster)",
+   "algorithm": 4
+  },
+  "ToXGVcrgNZA": {
+   "status": "ok",
+   "tidal": 98871651,
+   "offset": -20.201,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.017,
+   "good": 11,
+   "of": 12,
+   "title": "David Bowie - All the Young Dudes (Live at the Isle of Wight)",
+   "tidalTitle": "David Bowie - All The Young Dudes (Live, Glastonbury, 2000)",
+   "algorithm": 4
+  },
+  "U56Ns66Qrb8": {
+   "status": "ok",
+   "tidal": 233203488,
+   "offset": -4.264,
+   "scale": 1.000932,
+   "quality": "LOSSLESS",
+   "resid": 0.003,
+   "good": 12,
+   "of": 12,
+   "title": "Everything But The Girl - Missing (Official Music Video)",
+   "tidalTitle": "Everything But The Girl - Missing",
    "algorithm": 4
   },
   "UQn-7GCh2r0": {
@@ -2420,6 +3073,58 @@
    "title": "Toto - Africa",
    "tidalTitle": "TOTO - Africa (Live)",
    "algorithm": 3
+  },
+  "UzWHE32IxUc": {
+   "status": "ok",
+   "tidal": 162117,
+   "offset": -0.724,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.004,
+   "good": 12,
+   "of": 12,
+   "title": "Lenny Kravitz - American Woman (Official Music Video)",
+   "tidalTitle": "Lenny Kravitz - American Woman",
+   "algorithm": 4
+  },
+  "VI4xzwvaTWU": {
+   "status": "ok",
+   "tidal": 1190932,
+   "offset": -2.383,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "George Harrison - Cheer Down (Live)",
+   "tidalTitle": "George Harrison - Cheer Down (Live In Japan, 1991 / 2004 Mix)",
+   "algorithm": 4
+  },
+  "WB9_sf6oV1o": {
+   "status": "ok",
+   "tidal": 44814700,
+   "offset": -3.141,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "S Club - Never Had A Dream Come True",
+   "tidalTitle": "S Club - Never Had A Dream Come True",
+   "algorithm": 4
+  },
+  "X2LTL8KgKv8": {
+   "status": "ok",
+   "tidal": 91137502,
+   "offset": 0.382,
+   "scale": 0.999021,
+   "quality": "LOSSLESS",
+   "resid": 0.01,
+   "good": 12,
+   "of": 12,
+   "title": "Corey Hart - Sunglasses At Night (Official Music Video)",
+   "tidalTitle": "Corey Hart - Sunglasses At Night",
+   "algorithm": 4
   },
   "XzSrShbqlz8": {
    "status": "keep-youtube",
@@ -2440,6 +3145,32 @@
    "of": 12,
    "title": "Phil Collins - In The Air Tonight (Official Music Video) [HD Upgrade]",
    "tidalTitle": "Phil Collins - In the Air Tonight (Demo)",
+   "algorithm": 4
+  },
+  "Z-GRlWPWRfE": {
+   "status": "ok",
+   "tidal": 275151452,
+   "offset": -0.719,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.002,
+   "good": 12,
+   "of": 12,
+   "title": "The Dandy Warhols - Bohemian Like You",
+   "tidalTitle": "The Dandy Warhols - Bohemian Like You",
+   "algorithm": 4
+  },
+  "ZHVdScgUm7U": {
+   "status": "ok",
+   "tidal": 186885,
+   "offset": -0.961,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Laura Pausini - Non C'è (Official Video)",
+   "tidalTitle": "Laura Pausini - Non c'è",
    "algorithm": 4
   },
   "ZHwVBirqD2s": {
@@ -2501,6 +3232,19 @@
    "tidalTitle": "Scandal - Goodbye to You (feat. Patty Smyth)",
    "algorithm": 4
   },
+  "_6FBfAQ-NDE": {
+   "status": "ok",
+   "tidal": 20907684,
+   "offset": -1.107,
+   "scale": 0.996697,
+   "quality": "LOSSLESS",
+   "resid": 0.008,
+   "good": 12,
+   "of": 12,
+   "title": "Depeche Mode - Just Can't Get Enough (Official Video)",
+   "tidalTitle": "Depeche Mode - Just Can't Get Enough",
+   "algorithm": 4
+  },
   "aA2IRoPFIn0": {
    "status": "ok",
    "tidal": 534098510,
@@ -2512,6 +3256,42 @@
    "of": 12,
    "title": "Queen - Somebody To Love - HD Live - 1981 Montreal",
    "tidalTitle": "Queen - Somebody To Love (Live)",
+   "algorithm": 4
+  },
+  "b-I2s5zRbHg": {
+   "status": "segments",
+   "tidal": 49174531,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     5.5,
+     -5.347,
+     1.002709
+    ],
+    [
+     54.74,
+     -16.842,
+     1.0
+    ],
+    [
+     148.71,
+     75.758,
+     1.0
+    ],
+    [
+     166.96,
+     -35.13,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.98,
+   "title": "Amy Winehouse - You Know I'm No Good",
+   "tidalTitle": "Amy Winehouse - You Know I'm No Good (Demo Version)",
    "algorithm": 4
   },
   "cMOKamtpUA8": {
@@ -2528,6 +3308,40 @@
    "covered": 1.0,
    "title": "Pretenders - Back on the Chain Gang (Official Music Video)",
    "tidalTitle": "The Pretenders - Back on the Chain Gang (2007 Remaster)",
+   "algorithm": 4
+  },
+  "d73tiBBzvFM": {
+   "status": "ok",
+   "tidal": 38963629,
+   "offset": -0.459,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Ace of Base - All That She Wants (Official Music Video)",
+   "tidalTitle": "Ace of Base - All That She Wants",
+   "algorithm": 4
+  },
+  "dV3AziKTBUo": {
+   "status": "ok",
+   "tidal": 32784089,
+   "offset": -2.419,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Steve Miller Band - The Joker (Official Music Video)",
+   "tidalTitle": "Steve Miller Band - The Joker",
+   "algorithm": 4
+  },
+  "dlc6xCPx60U": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 415733073,
+   "tidalTitle": "The Marshall Tucker Band - Can't You See",
+   "title": "The Marshall Tucker Band - Can't You See (Live at Grand Opera House, 1973)",
    "algorithm": 4
   },
   "ghhEPM3RWxc": {
@@ -2595,6 +3409,19 @@
    "tidalTitle": "Evanescence - Bring Me To Life (Live From Le Zénith,France/2004)",
    "algorithm": 3
   },
+  "jQY_QL_wvQU": {
+   "status": "ok",
+   "tidal": 11335944,
+   "offset": 3.044,
+   "scale": 0.999383,
+   "quality": "LOSSLESS",
+   "resid": 0.003,
+   "good": 12,
+   "of": 12,
+   "title": "Michael Jackson - Will You Be There (Official Video - Upscaled)",
+   "tidalTitle": "Michael Jackson - Will You Be There (Single Version)",
+   "algorithm": 4
+  },
   "jubOWUlkxuk": {
    "status": "ok",
    "tidal": 2043137,
@@ -2621,12 +3448,126 @@
    "tidalTitle": "Mötley Crüe - Kickstart My Heart (From Live, Entertainment, or Death)",
    "algorithm": 3
   },
+  "kyhW2v0NDM0": {
+   "status": "ok",
+   "tidal": 172605721,
+   "offset": -0.366,
+   "scale": 0.994491,
+   "quality": "LOSSLESS",
+   "resid": 0.018,
+   "good": 12,
+   "of": 12,
+   "title": "Rush - Closer To The Heart (Official Music Video)",
+   "tidalTitle": "Rush - Closer To The Heart",
+   "algorithm": 4
+  },
+  "lCALGlGuVUA": {
+   "status": "segments",
+   "tidal": 92985794,
+   "segments": [
+    [
+     0.0,
+     5.022,
+     0.998101
+    ],
+    [
+     159.46,
+     3.751,
+     1.0
+    ],
+    [
+     152.21,
+     4.18,
+     1.0
+    ],
+    [
+     164.96,
+     4.969,
+     1.0
+    ],
+    [
+     179.45,
+     37.904,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Asia - Heat Of The Moment",
+   "tidalTitle": "Asia - Heat Of The Moment",
+   "algorithm": 4
+  },
+  "mQZmCJUSC6g": {
+   "status": "ok",
+   "tidal": 1660507,
+   "offset": -3.283,
+   "scale": 0.999582,
+   "quality": "LOSSLESS",
+   "resid": 0.008,
+   "good": 12,
+   "of": 12,
+   "title": "Carly Simon - You're So Vain",
+   "tidalTitle": "Carly Simon - You're So Vain (Live)",
+   "algorithm": 4
+  },
+  "mZ6VezKMoRY": {
+   "status": "segments",
+   "tidal": 343265016,
+   "segments": [
+    [
+     0.0,
+     0.04,
+     1.0
+    ],
+    [
+     3.75,
+     -0.847,
+     0.998
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Bob Marley & The Wailers - No Woman, No Cry (Live At The Rainbow 4th June 1977)",
+   "tidalTitle": "Bob Marley & The Wailers - No Woman, No Cry (Live At The Rainbow Theatre, London / 4th June 1977 / Remastered 2020)",
+   "algorithm": 4
+  },
   "mcouO3YM-aA": {
    "status": "keep-youtube",
    "reason": "nomatch",
    "tidal": 90320813,
    "tidalTitle": "Whitney Houston - I Wanna Dance With Somebody (Junior's Happy Handbag Mix)",
    "title": "I Wanna Dance With Somebody - Whitney Houston - funk cover ft. Olivia Kuper Harris",
+   "algorithm": 4
+  },
+  "n0J6q42zLH0": {
+   "status": "segments",
+   "tidal": 476553688,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     7.5,
+     0.062,
+     0.998716
+    ],
+    [
+     69.23,
+     -0.128,
+     0.998432
+    ],
+    [
+     108.72,
+     0.154,
+     0.994981
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.95,
+   "title": "HERMANS HERMITS - I'M INTO SOMETHING GOOD",
+   "tidalTitle": "Herman's Hermits - I'm Into Something Good",
    "algorithm": 4
   },
   "n2MtEsrcTTs": {
@@ -2655,12 +3596,51 @@
    "tidalTitle": "Deep Purple - Smoke On The Water (Live)",
    "algorithm": 3
   },
+  "nvlTJrNJ5lA": {
+   "status": "ok",
+   "tidal": 77555380,
+   "offset": -3.176,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.011,
+   "good": 12,
+   "of": 12,
+   "title": "Tom Petty And The Heartbreakers - I Won't Back Down",
+   "tidalTitle": "Tom Petty - I Won't Back Down",
+   "algorithm": 4
+  },
   "o6xGqi5itxs": {
    "status": "keep-youtube",
    "reason": "cuts",
    "tidal": 6887847,
    "tidalTitle": "Peter Frampton - Show Me The Way (Live)",
    "title": "Show Me The Way - Peter Frampton ｜ The Midnight Special",
+   "algorithm": 4
+  },
+  "oA3-InoYsWQ": {
+   "status": "ok",
+   "tidal": 1499694,
+   "offset": -0.025,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.009,
+   "good": 12,
+   "of": 12,
+   "title": "George Thorogood And The Destroyers - Get A Haircut",
+   "tidalTitle": "George Thorogood - Get A Haircut",
+   "algorithm": 4
+  },
+  "ojdbDYahiCQ": {
+   "status": "ok",
+   "tidal": 2798963,
+   "offset": -0.359,
+   "scale": 0.998999,
+   "quality": "LOSSLESS",
+   "resid": 0.001,
+   "good": 12,
+   "of": 12,
+   "title": "Amy Winehouse - Tears Dry On Their Own",
+   "tidalTitle": "Amy Winehouse - Tears Dry On Their Own",
    "algorithm": 4
   },
   "opYXf2WXKFE": {
@@ -2679,6 +3659,122 @@
    "title": "High & Dry - Radiohead (Orchestral Cover) ft. Carrie Manolakos",
    "algorithm": 4
   },
+  "qA1nGPM9yHA": {
+   "status": "ok",
+   "tidal": 567364616,
+   "offset": -0.612,
+   "scale": 1.00189,
+   "quality": "LOSSLESS",
+   "resid": 0.027,
+   "good": 11,
+   "of": 12,
+   "title": "Everlast - What it's Like (Official Music Video)",
+   "tidalTitle": "Everlast - What It's Like (live acoustic)",
+   "algorithm": 4
+  },
+  "qORYO0atB6g": {
+   "status": "segments",
+   "tidal": 3049173,
+   "segments": [
+    [
+     0.0,
+     208.985,
+     1.0
+    ],
+    [
+     9.5,
+     209.155,
+     1.0
+    ],
+    [
+     9.0,
+     210.132,
+     1.0
+    ],
+    [
+     18.5,
+     null,
+     1.0
+    ],
+    [
+     40.24,
+     -38.236,
+     0.999007
+    ],
+    [
+     247.43,
+     -37.505,
+     1.0
+    ],
+    [
+     248.43,
+     -37.225,
+     1.0
+    ],
+    [
+     259.68,
+     -38.532,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.92,
+   "title": "Beastie Boys - Intergalactic",
+   "tidalTitle": "Beastie Boys - Intergalactic (Remastered 2009)",
+   "algorithm": 4
+  },
+  "qrO4YZeyl0I": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 35586652,
+   "tidalTitle": "Lady Gaga - Bad Romance (Hercules & Love Affair Remix)",
+   "title": "Lady Gaga - Bad Romance (Official Music Video)",
+   "algorithm": 4
+  },
+  "qxZInIyOBXk": {
+   "status": "ok",
+   "tidal": 1822994,
+   "offset": 0.074,
+   "scale": 0.998685,
+   "quality": "LOSSLESS",
+   "resid": 0.004,
+   "good": 12,
+   "of": 12,
+   "title": "Pat Benatar - We Belong (Official Music Video)",
+   "tidalTitle": "Pat Benatar - We Belong",
+   "algorithm": 4
+  },
+  "r8OipmKFDeM": {
+   "status": "segments",
+   "tidal": 156876008,
+   "segments": [
+    [
+     0.0,
+     265.985,
+     1.0
+    ],
+    [
+     9.75,
+     266.704,
+     1.0
+    ],
+    [
+     10.75,
+     267.372,
+     1.0
+    ],
+    [
+     12.75,
+     -0.059,
+     1.006107
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Oasis - Don't Look Back In Anger (Official Video)",
+   "tidalTitle": "Oasis - Don't Look Back In Anger (Remastered)",
+   "algorithm": 4
+  },
   "rywUS-ohqeE": {
    "status": "ok",
    "tidal": 4869230,
@@ -2690,6 +3786,32 @@
    "of": 12,
    "title": "Alicia Keys - No One (Official Music Video)",
    "tidalTitle": "Alicia Keys - No One",
+   "algorithm": 4
+  },
+  "sKzvEThmqxE": {
+   "status": "ok",
+   "tidal": 34199095,
+   "offset": 0.012,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "What Is Life (2014 Remaster)",
+   "tidalTitle": "George Harrison - What Is Life (Remastered 2014)",
+   "algorithm": 4
+  },
+  "sc5iTNVEOAg": {
+   "status": "ok",
+   "tidal": 494588,
+   "offset": -13.381,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.009,
+   "good": 12,
+   "of": 12,
+   "title": "Lit - My Own Worst Enemy (Official Music Video)",
+   "tidalTitle": "Lit - My Own Worst Enemy",
    "algorithm": 4
   },
   "tH2w6Oxx0kQ": {
@@ -2726,6 +3848,48 @@
    "tidalTitle": "Johnny Cash - Sixteen Tons",
    "algorithm": 4
   },
+  "tiNgH1JgY9A": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 94477844,
+   "tidalTitle": "Nazareth - Love Leads To Madness",
+   "title": "Nazareth - Love Leads to Madness",
+   "algorithm": 4
+  },
+  "ty1dwBCR6D0": {
+   "status": "keep-youtube",
+   "reason": "cuts",
+   "tidal": 93242280,
+   "tidalTitle": "Neil Diamond - Sweet Caroline (Live At The Troubador/1970)",
+   "title": "Neil Diamond - Sweet Caroline (Live At The Greek Theatre ⧸ 2012)",
+   "algorithm": 4
+  },
+  "uejh-bHa4To": {
+   "status": "ok",
+   "tidal": 35342610,
+   "offset": -0.326,
+   "scale": 0.999384,
+   "quality": "LOSSLESS",
+   "resid": 0.016,
+   "good": 11,
+   "of": 12,
+   "title": "'Til Tuesday - Voices Carry (Official Video)",
+   "tidalTitle": "'Til Tuesday - Voices Carry (Single Mix)",
+   "algorithm": 4
+  },
+  "v0NSeysrDYw": {
+   "status": "ok",
+   "tidal": 341759088,
+   "offset": -2.575,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.002,
+   "good": 12,
+   "of": 12,
+   "title": "Bob Sinclar - Love Generation (Official Video)",
+   "tidalTitle": "Bob Sinclar - Love Generation (Edit)",
+   "algorithm": 4
+  },
   "v2h9wJsKtXE": {
    "status": "ok",
    "tidal": 510816361,
@@ -2750,6 +3914,85 @@
    "of": 12,
    "title": "Freddie Mercury - I Was Born To Love You (Official Video Remastered)",
    "tidalTitle": "Freddie Mercury - I Was Born To Love You (Special Edition)",
+   "algorithm": 4
+  },
+  "wCDIYvFmgW8": {
+   "status": "segments",
+   "tidal": 35263975,
+   "segments": [
+    [
+     0.0,
+     null,
+     1.0
+    ],
+    [
+     35.24,
+     -34.302,
+     1.0
+    ],
+    [
+     44.74,
+     -33.963,
+     1.0
+    ],
+    [
+     44.99,
+     -33.079,
+     1.000665
+    ],
+    [
+     85.48,
+     -33.943,
+     1.0
+    ],
+    [
+     93.23,
+     -33.163,
+     1.001263
+    ],
+    [
+     142.21,
+     -33.883,
+     1.0
+    ],
+    [
+     158.96,
+     -32.955,
+     1.0
+    ],
+    [
+     170.95,
+     -33.254,
+     1.0
+    ],
+    [
+     170.7,
+     -33.986,
+     0.999031
+    ],
+    [
+     208.19,
+     null,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 0.77,
+   "title": "Fatboy Slim ft. Bootsy Collins - Weapon Of Choice [Official 4k Video]",
+   "tidalTitle": "Fatboy Slim - Weapon of Choice",
+   "algorithm": 4
+  },
+  "wIE5wwvicew": {
+   "status": "ok",
+   "tidal": 5244675,
+   "offset": -0.08,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.008,
+   "good": 12,
+   "of": 12,
+   "title": "Thin Lizzy - The Boys Are Back In Town (Official Lyric Video)",
+   "tidalTitle": "Thin Lizzy - The Boys Are Back In Town",
    "algorithm": 4
   },
   "wO0A0XcWy88": {
@@ -2802,6 +4045,32 @@
    "tidal": 1330757,
    "tidalTitle": "Divinyls - I Touch Myself",
    "title": "Divinyls - I Touch Myself (Official Music Video)",
+   "algorithm": 4
+  },
+  "x_XS5q0EUQs": {
+   "status": "ok",
+   "tidal": 65556746,
+   "offset": 0.0,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "Another Day in Paradise (2016 Remaster)",
+   "tidalTitle": "Phil Collins - Another Day in Paradise (2016 Remaster)",
+   "algorithm": 4
+  },
+  "xqovGKdgAXY": {
+   "status": "ok",
+   "tidal": 169537408,
+   "offset": -1.181,
+   "scale": 0.997431,
+   "quality": "LOSSLESS",
+   "resid": 0.004,
+   "good": 12,
+   "of": 12,
+   "title": "Suede - Beautiful Ones (Official Video)",
+   "tidalTitle": "Suede - Beautiful Ones",
    "algorithm": 4
   },
   "xuZA6qiJVfU": {
@@ -2870,6 +4139,37 @@
    "tidalTitle": "The Cars - Drive (Symphonic Version)",
    "algorithm": 4
   },
+  "y-H895vrIU8": {
+   "status": "segments",
+   "tidal": 58601392,
+   "segments": [
+    [
+     0.0,
+     2.417,
+     0.997028
+    ],
+    [
+     158.71,
+     1.157,
+     1.0
+    ],
+    [
+     168.21,
+     2.874,
+     0.993413
+    ],
+    [
+     183.7,
+     0.958,
+     1.0
+    ]
+   ],
+   "quality": "LOSSLESS",
+   "covered": 1.0,
+   "title": "Falco - Rock Me Amadeus (Official 4k Music Video)",
+   "tidalTitle": "Falco - Rock Me Amadeus",
+   "algorithm": 4
+  },
   "yCW7Aw8ugOI": {
    "status": "ok",
    "tidal": 2130154,
@@ -2881,6 +4181,32 @@
    "of": 12,
    "title": "Ramones - Sheena Is A Punk Rocker (Official Music Video)",
    "tidalTitle": "Ramones - Sheena Is a Punk Rocker (2001 Remaster)",
+   "algorithm": 4
+  },
+  "yURRmWtbTbo": {
+   "status": "ok",
+   "tidal": 11738482,
+   "offset": -15.454,
+   "scale": 1.002945,
+   "quality": "LOSSLESS",
+   "resid": 0.028,
+   "good": 12,
+   "of": 12,
+   "title": "Michael Jackson - Don't Stop 'Til You Get Enough (Official Video - Upscaled)",
+   "tidalTitle": "Michael Jackson - Don't Stop 'Til You Get Enough (2003 Edit)",
+   "algorithm": 4
+  },
+  "ypbjIwbTR8c": {
+   "status": "ok",
+   "tidal": 38036083,
+   "offset": -0.966,
+   "scale": 1.0,
+   "quality": "LOSSLESS",
+   "resid": 0.0,
+   "good": 12,
+   "of": 12,
+   "title": "David A. Stewart - Lily Was Here ft. Candy Dulfer",
+   "tidalTitle": "David A. Stewart - Lily Was Here (feat. Candy Dulfer)",
    "algorithm": 4
   },
   "z92bmlcmyq0": {
@@ -2902,6 +4228,19 @@
    "covered": 0.94,
    "title": "Night Ranger - Sister Christian (Official Music Video)",
    "tidalTitle": "Night Ranger - Sister Christian",
+   "algorithm": 4
+  },
+  "zRIbf6JqkNc": {
+   "status": "ok",
+   "tidal": 629055,
+   "offset": -10.067,
+   "scale": 0.999017,
+   "quality": "LOSSLESS",
+   "resid": 0.004,
+   "good": 12,
+   "of": 12,
+   "title": "Guns N' Roses - Don't Cry",
+   "tidalTitle": "Guns N' Roses - Don't Cry (Original)",
    "algorithm": 4
   }
  }
