@@ -6,7 +6,7 @@ sys.path.insert(0, str(HERE))
 from align import decode, align, segments
 from match import parse, tidal_same_song, clean_channel, norm, sim
 
-ALGORITHM = 4   # 4: edited videos in parts (segments); 3: 3: artist/song/album from the .nfo, any same-named TIDAL track (the audio decides); 2: exact frame rate
+ALGORITHM = 5   # 5: parts kept when 35 % of the video lines up; 4: 4: edited videos in parts (segments); 3: 3: artist/song/album from the .nfo, any same-named TIDAL track (the audio decides); 2: exact frame rate
 LIB = r"W:\Music (videos)"
 REPO = HERE.parent.parent
 OUT = pathlib.Path(os.environ["TEMP"]) / "tidalsync"; OUT.mkdir(exist_ok=True)
@@ -107,7 +107,7 @@ def stream_url(t, tries=3):
     raise Busy()
 
 
-PACE = 10  # seconds between TIDAL streams (TIDAL refuses bursts)
+PACE = 7  # seconds between TIDAL streams (TIDAL refuses bursts)
 
 
 def measure(s, tidalapi, vid, title, path):
@@ -130,7 +130,7 @@ def measure(s, tidalapi, vid, title, path):
         if sg:
             ends = [x[0] for x in sg[1:]] + [secs]
             covered = sum(e - x[0] for x, e in zip(sg, ends) if x[1] is not None)
-            if covered >= 0.6 * secs and len(sg) <= 12:
+            if covered >= 0.35 * secs and len(sg) <= 20:
                 return {"status": "segments", "tidal": t.id, "segments": [list(x) for x in sg], "quality": q,
                         "covered": round(covered / secs, 2), "title": title, "tidalTitle": entry["tidalTitle"]}
         if best is None or (r["status"] == "cuts" and best[0] != "cuts"): best = (r["status"], entry)
@@ -184,7 +184,8 @@ def work(wk, nw):
     for i, (vid, (title, path)) in enumerate(items):
         old = done.get(vid)
         # Done already: measured syncs from 3 on; anything else is tried again with the newest way.
-        if old and (old.get("algorithm", 1) >= ALGORITHM or (old.get("status") == "ok" and old.get("algorithm", 1) >= 3)): continue
+        if old and (old.get("algorithm", 1) >= ALGORITHM or (old.get("status") == "ok" and old.get("algorithm", 1) >= 3)
+                    or (old.get("status") == "segments" and old.get("algorithm", 1) >= 4)): continue
         try: done[vid] = {**measure(s, tidalapi, vid, title, path), "algorithm": ALGORITHM}
         except Exception as e:
             if not isinstance(e, Busy) and not any(x in str(e) for x in ("429", "400 Client Error", "TooManyRequests")): raise
