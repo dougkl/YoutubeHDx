@@ -4,9 +4,9 @@ import sys, os, re, json, glob, pathlib, datetime, time
 HERE = pathlib.Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from align import decode, align
-from match import parse, tidal_same_song, clean_channel
+from match import parse, tidal_same_song, clean_channel, norm, sim
 
-ALGORITHM = 2   # 2: exact frame rate (100.227/s), retries when TIDAL says too many requests
+ALGORITHM = 3   # 3: artist/song/album from the .nfo, any same-named TIDAL track (the audio decides); 2: exact frame rate
 LIB = r"W:\Music (videos)"
 REPO = HERE.parent.parent
 OUT = pathlib.Path(os.environ["TEMP"]) / "tidalsync"; OUT.mkdir(exist_ok=True)
@@ -43,19 +43,53 @@ def playlist_order():
     return ids or (json.load(open(f, encoding="utf-8")) if f.exists() else [])
 
 
-def candidates(s, tidalapi, title, secs):
-    v = parse(title, "")
-    if not v["artist"] or not v["track"]: return v, []
+SHOWS = re.compile(r"\b(the midnight special|toppop|top of the pops|totp|soul train|american bandstand|beat-club|musikladen)\b", re.I)
+
+
+def song_info(title, path):
+    """{artist, song, album[, either]} for a library video. Label uploads ("Provided to YouTube", with an album in the
+    .nfo the downloader wrote): the .nfo's artist, song and album. Otherwise the cleaned-up title, both ways round."""
+    nfo = os.path.splitext(path)[0] + ".nfo"
+    x = open(nfo, encoding="utf-8", errors="replace").read() if os.path.exists(nfo) else ""
+    tag = lambda t: (re.search(f"<{t}>(.*?)</{t}>", x, re.S) or [None, ""])[1].strip()
+    if tag("album") and tag("artist") and tag("originaltitle"):
+        return {"artist": tag("artist"), "song": tag("originaltitle"), "album": tag("album")}
+    t = re.sub(r"[\uff5c|\u29f8/]+|--+|~", " - ", title)   # the video's own title (the .nfo's has the channel in front)
+    # descriptions in brackets: (Official Video), [Official Music Video], (HD), [Remastered 2015], (Lyrics)...
+    t = re.sub(r"[(\[](?=[^)\]]*\b(official|lyrics?|hd|hq|4k|remaster(ed)?|video|audio|visuali[sz]er|clip|upscaled?)\b)[^)\]]*[)\]]", " ", t, flags=re.I)   # fullwidth bar, slashes, -- and ~ as separators
+    t = re.sub(r"\[\[.*?\]\]|#\w+|[^\w\s'&(),.!?\-]", " ", t)                       # hashtags, emoji, brackets' leftovers
+    t = SHOWS.sub(" ", t)
+    t = re.sub(r"\((official|lyrics?|hd|hq|4k|remaster|video|audio|music video|official music video)[^)]*\)", " ", t, flags=re.I)
+    parts = [x.strip(" -") for x in re.split(r"\s+-\s+", t) if x.strip(" -")]
+    while len(parts) >= 3 and norm(parts[0]) == norm(parts[1]): parts = parts[1:]   # "The Beatles - The Beatles - Hey Jude"
+    if len(parts) >= 2: return {"artist": parts[0], "song": parts[1], "album": "", "either": True}
+    return {"artist": clean_channel(tag("artist")), "song": parts[0] if parts else title, "album": ""}
+
+
+def _same_name(a, b):
+    a, b = norm(a), norm(b)
+    return bool(a and b) and (a == b or sim(a, b) >= 0.85 or (len(a) > 6 and (a in b or b in a)))
+
+
+def candidates(s, tidalapi, info, secs):
+    """Up to 4 TIDAL tracks by that artist with that song name within 240 s of the video: same album first, then
+    lossless / Hi-Res, then closest length. Live, remastered, single versions... all count: the audio decides."""
+    pairs = [(info["artist"], info["song"])] + ([(info["song"], info["artist"])] if info.get("either") else [])
     seen = {}
-    for q in dict.fromkeys([f"{v['artist']} {v['track']}", f"{v['track']} {v['artist']}"]):
-      for t in s.search(q, models=[tidalapi.Track], limit=25)["tracks"]:
-        if t.id in seen or abs(t.duration - secs) > 180: continue
-        if tidal_same_song(v, [a.name for a in t.artists], t.name, t.version or ""): seen[t.id] = t
-    if not seen and v["artist"] and v["track"]:  # "Song - Artist" titles: try the other way round
-        r = {**v, "artist": v["track"], "track": v["artist"]}
-        for t in s.search(f"{r['artist']} {r['track']}", models=[tidalapi.Track], limit=25)["tracks"]:
-            if abs(t.duration - secs) <= 180 and tidal_same_song(r, [a.name for a in t.artists], t.name, t.version or ""): seen[t.id] = t
-    return v, sorted(seen.values(), key=lambda t: (-RANK.get(str(t.audio_quality).split(".")[-1], 0), abs(t.duration - secs)))[:3]
+    for artist, song in pairs:
+        if not song: continue
+        for q in dict.fromkeys([f"{artist} {song}".strip(), song]):
+            for t in s.search(q, models=[tidalapi.Track], limit=25)["tracks"]:
+                if t.id in seen or abs(t.duration - secs) > 240: continue
+                names = " ".join(a.name for a in t.artists)
+                if artist and not (_same_name(artist, names) or norm(artist) in norm(names) or norm(t.artist.name) in norm(artist)): continue
+                if not _same_name(re.split(r" [(\[]", t.name)[0], re.split(r" [(\[]", song)[0]): continue
+                seen[t.id] = t
+            time.sleep(1)
+    album = norm(info.get("album", ""))
+    key = lambda t: (0 if album and norm(t.album.name or "").startswith(album[:20]) else 1,
+                     -RANK.get(str(t.audio_quality).split(".")[-1], 0), abs(t.duration - secs))
+    return sorted(seen.values(), key=key)[:4]
 
 
 class Busy(Exception):
@@ -79,7 +113,7 @@ PACE = 10  # seconds between TIDAL streams (TIDAL refuses bursts)
 def measure(s, tidalapi, vid, title, path):
     video = decode(path)
     secs = len(video) / 11025
-    v, cands = candidates(s, tidalapi, title, secs)
+    cands = cached_candidates(s, tidalapi, vid, title, path, secs)
     if not cands: return {"status": "keep-youtube", "reason": "not-on-tidal", "title": title}
     best = None
     for t in cands:
@@ -95,6 +129,39 @@ def measure(s, tidalapi, vid, title, path):
     return {"status": "keep-youtube", "reason": st, **{k: e[k] for k in ("tidal", "tidalTitle", "title") if k in e}}
 
 
+def cached_candidates(s, tidalapi, vid, title, path, secs):
+    """Candidates from prepare (search only), else searched now."""
+    f = OUT / "candidates.json"
+    cache = json.load(open(f, encoding="utf-8")) if f.exists() else {}
+    if vid in cache and cache[vid].get("algorithm") == ALGORITHM:
+        return [s.track(i) for i in cache[vid]["ids"]]
+    return candidates(s, tidalapi, song_info(title, path), secs)
+
+
+def prepare():
+    """Search TIDAL for every library video's candidates (no streams needed) and keep them for the measuring runs."""
+    import tidalapi, subprocess
+    s = tidalapi.Session(); s.load_session_from_file(SESSION)
+    f = OUT / "candidates.json"
+    cache = json.load(open(f, encoding="utf-8")) if f.exists() else {}
+    lib = library(); pos = {v: i for i, v in enumerate(playlist_order())}
+    for n, (vid, (title, path)) in enumerate(sorted(lib.items(), key=lambda kv: pos.get(kv[0], 10 ** 6))):
+        if cache.get(vid, {}).get("algorithm") == ALGORITHM: continue
+        try:
+            secs = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                                        capture_output=True, text=True).stdout.strip() or 0)
+            info = song_info(title, path)
+            c = candidates(s, tidalapi, info, secs)
+        except Exception as e:
+            if any(x in str(e) for x in ("429", "400 Client Error", "TooManyRequests")):
+                print("TIDAL busy, stopping", flush=True); break
+            print(f"{n+1} {vid} error {str(e)[:80]}", flush=True); continue
+        cache[vid] = {"algorithm": ALGORITHM, "ids": [t.id for t in c], "info": info,
+                      "found": [f"{t.artist.name} - {t.name}{' (' + t.version + ')' if t.version else ''} [{t.album.name}] {t.duration}s" for t in c]}
+        print(f"{n+1}/{len(lib)} {vid} {len(c)} | {info['artist']} - {info['song']}", flush=True)
+        json.dump(cache, open(f, "w", encoding="utf-8"), ensure_ascii=False, indent=0)
+
+
 def work(wk, nw):
     import tidalapi
     s = tidalapi.Session(); s.load_session_from_file(SESSION); s.audio_quality = tidalapi.Quality.high_lossless
@@ -107,7 +174,7 @@ def work(wk, nw):
     items = sorted(lib.items(), key=lambda kv: (pos.get(kv[0], 10 ** 6), kv[1][0].lower()))[wk::nw]
     for i, (vid, (title, path)) in enumerate(items):
         old = done.get(vid)
-        if old and (old.get("algorithm", 1) >= ALGORITHM or old.get("reason") == "not-on-tidal"): continue
+        if old and old.get("algorithm", 1) >= ALGORITHM: continue
         try: done[vid] = {**measure(s, tidalapi, vid, title, path), "algorithm": ALGORITHM}
         except Exception as e:
             if not isinstance(e, Busy) and not any(x in str(e) for x in ("429", "400 Client Error", "TooManyRequests")): raise
@@ -139,4 +206,4 @@ def merge():
 
 
 if __name__ == "__main__":
-    merge() if sys.argv[1] == "merge" else work(int(sys.argv[1]), int(sys.argv[2]))
+    {"merge": merge, "prepare": prepare}.get(sys.argv[1], lambda: work(int(sys.argv[1]), int(sys.argv[2])))()
