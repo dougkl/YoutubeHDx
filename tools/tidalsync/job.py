@@ -88,6 +88,7 @@ def work(wk, nw):
     from collections import Counter
     artist = lambda title: parse(title, "")["artist"]
     count = Counter(artist(t) for t, _ in lib.values())
+    count[''] = -1  # titles without an 'Artist - Song' shape: last
     items = sorted(lib.items(), key=lambda kv: (-count[artist(kv[1][0])], kv[1][0].lower()))[wk::nw]
     for i, (vid, (title, path)) in enumerate(items):
         old = done.get(vid)
